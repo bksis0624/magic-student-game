@@ -1,7 +1,6 @@
 {
   "name": "魔法學徒",
   "short_name": "魔法學徒",
-  "description": "一款縱向直向操控的魔法倖存者風格 Roguelike 網頁遊戲，玩家可自由選擇技能與屬性進行升級與生存挑戰。",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#0d0f17",
