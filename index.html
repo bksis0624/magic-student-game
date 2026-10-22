@@ -53,33 +53,15 @@
     <div id="game-container">
         <div class="scanlines"></div>
 
-        <!-- HUD -->
+        <!-- HUD (簡化版：只留頂部時間分數與觸控提示，去除原本大型玩家狀態 UI) -->
         <div id="hud" class="absolute top-0 left-0 w-full p-4 pointer-events-none z-20 flex flex-col justify-between h-full hidden">
-            <!-- 玩家狀態面板：加上 scale(1.75) 放大 1.75 倍 -->
-            <div class="max-w-xl mx-auto w-full bg-slate-900/85 backdrop-blur border border-slate-800 p-3 rounded-xl shadow-lg mt-6" style="transform: scale(1.75); transform-origin: top center;">
-                <div class="flex items-center justify-between gap-3 mb-2">
-                    <div class="flex items-center gap-3">
-                        <span id="level-txt" class="font-bold text-amber-400 text-sm whitespace-nowrap">LVL 1</span>
-                        <div class="w-32 md:w-48 bg-slate-950 h-3 rounded-full overflow-hidden border border-slate-700/50 relative">
-                            <div id="xp-bar" class="bg-gradient-to-r from-emerald-500 to-teal-400 h-full w-0 transition-all duration-200"></div>
-                        </div>
-                    </div>
-                    <span class="text-[10px] font-mono text-slate-400 bg-slate-950/60 px-2 py-0.5 rounded border border-slate-800">魔法學徒</span>
+            <!-- 頂部資訊：僅顯示時間與擊殺數 -->
+            <div class="flex justify-between items-center w-full px-6 pt-4 font-mono font-bold text-lg text-slate-200 drop-shadow-md">
+                <div class="bg-slate-900/80 px-4 py-1.5 rounded-full border border-slate-800">
+                    ⏱️ <span id="timer-txt" class="text-amber-300">00:00 / 15:00</span>
                 </div>
-
-                <div class="flex items-center justify-between text-xs gap-4">
-                    <div class="flex items-center gap-2 flex-1">
-                        <span class="font-semibold text-rose-400">HP</span>
-                        <div class="w-full bg-slate-950 h-3 rounded-full overflow-hidden border border-slate-700/50 relative">
-                            <div id="hp-bar" class="bg-gradient-to-r from-rose-600 to-red-400 h-full w-full transition-all duration-150"></div>
-                        </div>
-                        <span id="hp-txt" class="text-slate-300 font-mono text-xs whitespace-nowrap">100/100</span>
-                    </div>
-
-                    <div class="flex gap-4 font-mono font-bold text-slate-200">
-                        <div>⏱️ <span id="timer-txt" class="text-amber-300">00:00 / 15:00</span></div>
-                        <div>💀 <span id="score-txt" class="text-cyan-300">0</span></div>
-                    </div>
+                <div class="bg-slate-900/80 px-4 py-1.5 rounded-full border border-slate-800">
+                    💀 <span id="score-txt" class="text-cyan-300">0</span>
                 </div>
             </div>
 
@@ -95,7 +77,6 @@
         <!-- Level Up Modal -->
         <div id="upgrade-modal" class="hidden absolute inset-0 bg-slate-950/80 backdrop-blur-md z-30 flex flex-col items-center justify-center p-4 pointer-events-auto">
             
-            <!-- 加上 scale(1.75) 放大 1.75 倍，並適度調整最大寬度與間距 -->
             <div style="transform: scale(1.75); transform-origin: center center; display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; max-width: 400px;">
                 
                 <h2 class="text-2xl font-black text-amber-400 mb-1 tracking-wide drop-shadow">LEVEL UP!</h2>
@@ -273,10 +254,6 @@
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
         const startBtn = document.getElementById('start-btn');
-        const levelTxt = document.getElementById('level-txt');
-        const xpBar = document.getElementById('xp-bar');
-        const hpBar = document.getElementById('hp-bar');
-        const hpTxt = document.getElementById('hp-txt');
         const timerTxt = document.getElementById('timer-txt');
         const scoreTxt = document.getElementById('score-txt');
         const bossWarning = document.getElementById('boss-warning');
@@ -318,7 +295,7 @@
         let hasMagicSpinUnlocked = false;
         let hasThunderSniperUnlocked = false;
         let hasMagicFireUnlocked = false;
-        const currentScoreMultiplier = 1.0; // 分數加成固定為 1.0
+        const currentScoreMultiplier = 1.0;
         let finalCalculatedScore = 0;
 
         let leaderboardData = [];
@@ -585,6 +562,33 @@
                 ctx.shadowColor = '#ffffff';
                 ctx.shadowBlur = 12;
                 ctx.fill();
+
+                // 玩家頭頂血條與等級 UI
+                const barWidth = 48;
+                const barHeight = 6;
+                const barX = this.x - barWidth / 2;
+                const barY = this.y - this.radius - 18;
+
+                // 血條背景底框
+                ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+                ctx.strokeStyle = 'rgba(51, 65, 85, 0.8)';
+                ctx.lineWidth = 1;
+                ctx.fillRect(barX - 1, barY - 1, barWidth + 2, barHeight + 2);
+                ctx.strokeRect(barX - 1, barY - 1, barWidth + 2, barHeight + 2);
+
+                // 血條 Fill
+                const hpRatio = Math.max(0, Math.min(1, this.hp / this.maxHp));
+                ctx.fillStyle = hpRatio > 0.5 ? '#f43f5e' : hpRatio > 0.25 ? '#f59e0b' : '#ef4444';
+                ctx.fillRect(barX, barY, barWidth * hpRatio, barHeight);
+
+                // 等級與文字標示
+                ctx.font = 'bold 10px monospace';
+                ctx.fillStyle = '#fbbf24';
+                ctx.textAlign = 'center';
+                ctx.shadowColor = '#000000';
+                ctx.shadowBlur = 4;
+                ctx.fillText(`LV.${this.level}`, this.x, barY - 4);
+
                 ctx.restore();
             }
         }
@@ -1585,12 +1589,6 @@
         }
 
         function updateHUD() {
-            levelTxt.innerText = `LVL ${player.level}`;
-            const xpPercent = (player.xp / player.nextXp) * 100;
-            xpBar.style.width = `${Math.min(100, xpPercent)}%`;
-            const hpPercent = (player.hp / player.maxHp) * 100;
-            hpBar.style.width = `${Math.max(0, hpPercent)}%`;
-            hpTxt.innerText = `${Math.ceil(player.hp)}/${player.maxHp}`;
             scoreTxt.innerText = killsCount;
         }
 
