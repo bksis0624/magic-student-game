@@ -850,16 +850,20 @@
                     this.y += Math.sin(angleToPlayer) * this.speed;
                 } else if (this.type === 'wasp') {
                     if (this.state === 'warning') {
+                        // 【修改這裡】讓黃蜂在警告蓄力期間，每一影格都持續鎖定玩家的位置！
                         this.angle = Math.atan2(player.y - this.y, player.x - this.x);
+                        
                         this.warningTimer += delta;
                         if (this.warningTimer >= 1000) {
                             this.state = 'pausing';
                             this.pauseTimer = 0;
                         }
                     } else if (this.state === 'pausing') {
+                        // 暫停瞬間也維持最後鎖定的方向
                         this.pauseTimer += delta;
                         if (this.pauseTimer >= 200) this.state = 'rushing';
                     } else if (this.state === 'rushing') {
+                        // 衝刺中維持衝刺方向直線前進
                         this.x += Math.cos(this.angle) * this.speed;
                         this.y += Math.sin(this.angle) * this.speed;
                     }
