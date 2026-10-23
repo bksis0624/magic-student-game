@@ -3,9 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>魔法學徒 - Vampire Survivors (手機縱向版)</title>
-	<link rel="manifest" href="manifest.json">
+    <title>魔法學徒 - Vampire Survivors (Pixi.js WebGL 版)</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 引入 Pixi.js v7 CDN (WebGL 加速渲染器) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/7.3.2/pixi.min.js"></script>
     <style>
         body {
             margin: 0;
@@ -53,9 +54,8 @@
     <div id="game-container">
         <div class="scanlines"></div>
 
-        <!-- HUD (簡化版：只留頂部時間分數與觸控提示，去除原本大型玩家狀態 UI) -->
+        <!-- HUD -->
         <div id="hud" class="absolute top-0 left-0 w-full p-4 pointer-events-none z-20 flex flex-col justify-between h-full hidden">
-            <!-- 頂部資訊：僅顯示時間與擊殺數 -->
             <div class="flex justify-between items-center w-full px-6 pt-4 font-mono font-bold text-lg text-slate-200 drop-shadow-md">
                 <div class="bg-slate-900/80 px-4 py-1.5 rounded-full border border-slate-800">
                     ⏱️ <span id="timer-txt" class="text-amber-300">00:00 / 15:00</span>
@@ -76,39 +76,30 @@
 
         <!-- Level Up Modal -->
         <div id="upgrade-modal" class="hidden absolute inset-0 bg-slate-950/80 backdrop-blur-md z-30 flex flex-col items-center justify-center p-4 pointer-events-auto">
-            
             <div style="transform: scale(1.75); transform-origin: center center; display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; max-width: 400px;">
-                
                 <h2 class="text-2xl font-black text-amber-400 mb-1 tracking-wide drop-shadow">LEVEL UP!</h2>
                 <p class="text-slate-400 text-[11px] mb-3">選擇一項技能或屬性升級：</p>
-                
                 <div id="upgrade-cards" class="flex flex-col gap-2.5 w-full"></div>
-
             </div>
         </div>
 
         <!-- Main Menu Modal -->
         <div id="menu-modal" class="absolute inset-0 bg-slate-950/90 backdrop-blur-lg z-40 flex flex-col items-center justify-center p-2 text-center overflow-hidden">
-            
             <div style="transform: scale(1.75); transform-origin: center center; display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; max-width: 440px;">
-                
                 <h1 id="menu-title" class="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-amber-300 to-rose-500 mb-3 tracking-wider">
-                    魔法學徒
+                    魔法學徒 (WebGL)
                 </h1>
 
-                <!-- 技能設定區塊 -->
                 <div id="skill-config-panel" class="bg-slate-900/90 border border-slate-800 rounded-2xl p-3.5 w-full mb-4 text-left shadow-xl relative">
                     <h3 class="text-xs font-bold text-amber-400 uppercase tracking-widest mb-2 border-b border-slate-800 pb-1.5">
                         開局初始技能設定
                     </h3>
-                    
                     <div id="skill-config-list" class="flex flex-col gap-2 mt-2"></div>
                 </div>
 
                 <button id="start-btn" class="w-full py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold text-lg rounded-xl shadow-lg shadow-blue-500/30 transition transform active:scale-95 cursor-pointer">
                     開始遊戲
                 </button>
-
             </div>
         </div>
 
@@ -159,6 +150,7 @@
     </div>
 
     <script>
+        // 音效系統
         class SoundEffects {
             constructor() { this.ctx = null; }
             init() {
@@ -261,6 +253,8 @@
                 for (let i = 0; i < initialSize; i++) {
                     const obj = this.createFn();
                     obj._inPool = true;
+                    if (obj.graphics) obj.graphics.visible = false;
+                    if (obj.textObj) obj.textObj.visible = false;
                     this.pool.push(obj);
                 }
             }
@@ -268,6 +262,8 @@
             get(...args) {
                 let obj = this.pool.length > 0 ? this.pool.pop() : this.createFn();
                 obj._inPool = false;
+                if (obj.graphics) obj.graphics.visible = true;
+                if (obj.textObj) obj.textObj.visible = true;
                 this.resetFn(obj, ...args);
                 return obj;
             }
@@ -275,6 +271,8 @@
             release(obj) {
                 if (obj && !obj._inPool) {
                     obj._inPool = true;
+                    if (obj.graphics) obj.graphics.visible = false;
+                    if (obj.textObj) obj.textObj.visible = false;
                     this.pool.push(obj);
                 }
             }
@@ -282,7 +280,41 @@
 
         const audio = new SoundEffects();
         const canvas = document.getElementById('gameCanvas');
-        const ctx = canvas.getContext('2d');
+        
+        // 初始化 Pixi.js Application (WebGL 2D Render Engine)
+        const app = new PIXI.Application({
+            view: canvas,
+            width: 900,
+            height: 1600,
+            backgroundColor: 0x121520,
+            antialias: true
+        });
+
+        // 定義 Pixi 渲染圖層 Containers (層級由下而上)
+        const bgLayer = new PIXI.Container();
+        const gemLayer = new PIXI.Container();
+        const enemyLayer = new PIXI.Container();
+        const bulletLayer = new PIXI.Container();
+        const effectLayer = new PIXI.Container();
+        const playerLayer = new PIXI.Container();
+        const textLayer = new PIXI.Container();
+
+        app.stage.addChild(bgLayer);
+        app.stage.addChild(gemLayer);
+        app.stage.addChild(enemyLayer);
+        app.stage.addChild(bulletLayer);
+        app.stage.addChild(effectLayer);
+        app.stage.addChild(playerLayer);
+        app.stage.addChild(textLayer);
+
+        // 繪製背景網格
+        const gridGraphics = new PIXI.Graphics();
+        gridGraphics.lineStyle(1, 0x1a1f35, 1);
+        const gridSize = 60;
+        for (let x = 0; x < 900; x += gridSize) { gridGraphics.moveTo(x, 0); gridGraphics.lineTo(x, 1600); }
+        for (let y = 0; y < 1600; y += gridSize) { gridGraphics.moveTo(0, y); gridGraphics.lineTo(900, y); }
+        bgLayer.addChild(gridGraphics);
+
         const startBtn = document.getElementById('start-btn');
         const timerTxt = document.getElementById('timer-txt');
         const scoreTxt = document.getElementById('score-txt');
@@ -310,7 +342,6 @@
         const leaderboardList = document.getElementById('leaderboard-list');
         const leaderboardSection = document.getElementById('leaderboard-section');
         const gameoverButtons = document.getElementById('gameover-buttons');
-
         const skillConfigList = document.getElementById('skill-config-list');
 
         const defaultSkillConfigs = {
@@ -325,7 +356,6 @@
         let hasMagicSpinUnlocked = false;
         let hasThunderSniperUnlocked = false;
         let hasMagicFireUnlocked = false;
-        const currentScoreMultiplier = 1.0;
         let finalCalculatedScore = 0;
 
         let leaderboardData = [];
@@ -413,8 +443,6 @@
 
         const GAME_WIDTH = 900;
         const GAME_HEIGHT = 1600;
-        canvas.width = GAME_WIDTH;
-        canvas.height = GAME_HEIGHT;
 
         function resizeGameContainer() {
             const container = document.getElementById('game-container');
@@ -428,7 +456,6 @@
 
         let isGameRunning = false;
         let isPaused = false;
-        let animationFrameId = null;
         let lastTimestamp = 0;
         let gameTime = 0;
         let killsCount = 0;
@@ -444,7 +471,6 @@
         let enemyBullets = [];
         let enemies = [];
         let gems = [];
-        let specialItems = [];
         let particles = [];
         let floatingTexts = [];
         let explosions = [];
@@ -505,7 +531,7 @@
         canvas.addEventListener('touchend', () => { touchActive = false; });
 
         // ==========================================
-        // 遊戲物件類別定義 (必須先於物件池宣告)
+        // Pixi.js 遊戲物件類別 (結合物件池與 Graphics)
         // ==========================================
         class Player {
             constructor(x, y) {
@@ -529,6 +555,21 @@
                 this.lastFireballTime = 0;
                 this.lastSpinShotTime = 0;
                 this.lastLightningTime = 0;
+
+                // Pixi Graphics 物件
+                this.graphics = new PIXI.Graphics();
+                this.hpBar = new PIXI.Graphics();
+                this.lvlText = new PIXI.Text('LV.1', {
+                    fontFamily: 'monospace',
+                    fontSize: 10,
+                    fontWeight: 'bold',
+                    fill: 0xfbbf24
+                });
+                this.lvlText.anchor.set(0.5, 1);
+
+                playerLayer.addChild(this.graphics);
+                playerLayer.addChild(this.hpBar);
+                playerLayer.addChild(this.lvlText);
             }
 
             get speed() { return 3.2 + (this.speedLevel * 0.1); }
@@ -572,99 +613,68 @@
             }
 
             draw() {
-                ctx.save();
+                this.graphics.clear();
                 if (shieldDurationTimer > 0) {
-                    ctx.beginPath();
-                    ctx.arc(this.x, this.y, 26, 0, Math.PI * 2);
-                    ctx.fillStyle = 'rgba(234, 179, 8, 0.2)';
-                    ctx.strokeStyle = '#eab308';
-                    ctx.lineWidth = 2.5;
-                    ctx.shadowColor = '#eab308';
-                    ctx.shadowBlur = 14;
-                    ctx.fill();
-                    ctx.stroke();
+                    this.graphics.beginFill(0xeab308, 0.2);
+                    this.graphics.lineStyle(2.5, 0xeab308);
+                    this.graphics.drawCircle(this.x, this.y, 26);
+                    this.graphics.endFill();
                 }
 
-                ctx.beginPath();
-                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
-                if (player.invincibleTimer > performance.now() && Math.floor(performance.now() / 30) % 2 === 0) {
-                    ctx.fillStyle = '#93c5fd';
-                } else {
-                    ctx.fillStyle = '#ffffff';
-                }
-                ctx.shadowColor = '#ffffff';
-                ctx.shadowBlur = 12;
-                ctx.fill();
+                const isFlash = this.invincibleTimer > performance.now() && Math.floor(performance.now() / 30) % 2 === 0;
+                this.graphics.beginFill(isFlash ? 0x93c5fd : 0xffffff);
+                this.graphics.lineStyle(0);
+                this.graphics.drawCircle(this.x, this.y, this.radius);
+                this.graphics.endFill();
 
+                // 畫血條
+                this.hpBar.clear();
                 const barWidth = 48;
                 const barHeight = 6;
                 const barX = this.x - barWidth / 2;
                 const barY = this.y - this.radius - 18;
 
-                ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
-                ctx.strokeStyle = 'rgba(51, 65, 85, 0.8)';
-                ctx.lineWidth = 1;
-                ctx.fillRect(barX - 1, barY - 1, barWidth + 2, barHeight + 2);
-                ctx.strokeRect(barX - 1, barY - 1, barWidth + 2, barHeight + 2);
+                this.hpBar.beginFill(0x0f172a, 0.85);
+                this.hpBar.lineStyle(1, 0x334155, 0.8);
+                this.hpBar.drawRect(barX - 1, barY - 1, barWidth + 2, barHeight + 2);
+                this.hpBar.endFill();
 
                 const hpRatio = Math.max(0, Math.min(1, this.hp / this.maxHp));
-                ctx.fillStyle = hpRatio > 0.5 ? '#f43f5e' : hpRatio > 0.25 ? '#f59e0b' : '#ef4444';
-                ctx.fillRect(barX, barY, barWidth * hpRatio, barHeight);
+                const hpColor = hpRatio > 0.5 ? 0xf43f5e : hpRatio > 0.25 ? 0xf59e0b : 0xef4444;
+                this.hpBar.beginFill(hpColor);
+                this.hpBar.lineStyle(0);
+                this.hpBar.drawRect(barX, barY, barWidth * hpRatio, barHeight);
+                this.hpBar.endFill();
 
-                ctx.font = 'bold 10px monospace';
-                ctx.fillStyle = '#fbbf24';
-                ctx.textAlign = 'center';
-                ctx.shadowColor = '#000000';
-                ctx.shadowBlur = 4;
-                ctx.fillText(`LV.${this.level}`, this.x, barY - 4);
-
-                ctx.restore();
+                this.lvlText.text = `LV.${this.level}`;
+                this.lvlText.x = this.x;
+                this.lvlText.y = barY - 2;
             }
         }
 
         class FloatingText {
-            constructor() {}
+            constructor() {
+                this.textObj = new PIXI.Text('', {
+                    fontFamily: 'monospace',
+                    fontSize: 12,
+                    fontWeight: 'bold',
+                    fill: 0xfacc15
+                });
+                textLayer.addChild(this.textObj);
+            }
             update() {
                 this.y += this.vy;
                 this.life -= this.decay;
-            }
-            draw() {
-                ctx.save();
-                ctx.globalAlpha = Math.max(0, this.life);
-                ctx.font = 'bold 12px monospace';
-                ctx.fillStyle = this.color;
-                ctx.shadowColor = '#000000';
-                ctx.shadowBlur = 4;
-                ctx.fillText(this.text, this.x, this.y);
-                ctx.restore();
-            }
-        }
-
-        class SpecialItem {
-            constructor(x, y) {
-                this.x = x;
-                this.y = y;
-                this.radius = 10;
-            }
-            draw() {
-                ctx.save();
-                ctx.beginPath();
-                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
-                ctx.fillStyle = '#eab308';
-                ctx.shadowColor = '#eab308';
-                ctx.shadowBlur = 10;
-                ctx.fill();
-
-                ctx.beginPath();
-                ctx.arc(this.x, this.y, this.radius * 0.6, 0, Math.PI * 2);
-                ctx.fillStyle = '#38bdf8';
-                ctx.fill();
-                ctx.restore();
+                this.textObj.x = this.x;
+                this.textObj.y = this.y;
+                this.textObj.alpha = Math.max(0, this.life);
             }
         }
 
         class LightningBeam {
             constructor() {
+                this.graphics = new PIXI.Graphics();
+                effectLayer.addChild(this.graphics);
                 this.hitEnemies = new Set();
             }
             update() {
@@ -672,25 +682,20 @@
                 this.y += Math.sin(this.angle) * this.speed;
             }
             draw() {
-                ctx.save();
-                ctx.translate(this.x, this.y);
-                ctx.rotate(this.angle);
-                ctx.beginPath();
+                this.graphics.clear();
+                this.graphics.position.set(this.x, this.y);
+                this.graphics.rotation = this.angle;
+                
+                this.graphics.lineStyle(2, 0xfef08a);
                 const halfLen = this.length / 2;
                 const step = this.length / 6;
-                ctx.moveTo(-halfLen, 0);
-                ctx.lineTo(-halfLen + step, -2.5);
-                ctx.lineTo(-halfLen + step * 2, 2.5);
-                ctx.lineTo(-halfLen + step * 3, -2.5);
-                ctx.lineTo(-halfLen + step * 4, 2.5);
-                ctx.lineTo(-halfLen + step * 5, -2.5);
-                ctx.lineTo(halfLen, 0);
-                ctx.strokeStyle = '#fef08a';
-                ctx.lineWidth = 2;
-                ctx.shadowColor = '#eab308';
-                ctx.shadowBlur = 10;
-                ctx.stroke();
-                ctx.restore();
+                this.graphics.moveTo(-halfLen, 0);
+                this.graphics.lineTo(-halfLen + step, -2.5);
+                this.graphics.lineTo(-halfLen + step * 2, 2.5);
+                this.graphics.lineTo(-halfLen + step * 3, -2.5);
+                this.graphics.lineTo(-halfLen + step * 4, 2.5);
+                this.graphics.lineTo(-halfLen + step * 5, -2.5);
+                this.graphics.lineTo(halfLen, 0);
             }
         }
 
@@ -707,6 +712,9 @@
                 this.angle = 0;
                 this.duration = 8000;
                 this.elapsed = 0;
+
+                this.graphics = new PIXI.Graphics();
+                effectLayer.addChild(this.graphics);
             }
             update(delta, now) {
                 this.elapsed += delta;
@@ -725,45 +733,43 @@
                 }
             }
             draw() {
-                ctx.save();
-                ctx.translate(this.x, this.y);
-                ctx.rotate(this.angle * 0.5);
-                ctx.beginPath();
-                ctx.moveTo(0, -8);
-                ctx.lineTo(8, 0);
-                ctx.lineTo(0, 8);
-                ctx.lineTo(-8, 0);
-                ctx.closePath();
-                ctx.fillStyle = '#38bdf8';
-                ctx.shadowColor = '#38bdf8';
-                ctx.shadowBlur = this.isMagicSpin ? 18 : 12;
-                ctx.fill();
-                ctx.restore();
+                this.graphics.clear();
+                this.graphics.position.set(this.x, this.y);
+                this.graphics.rotation = this.angle * 0.5;
+                this.graphics.beginFill(0x38bdf8);
+                this.graphics.drawPolygon([0, -8, 8, 0, 0, 8, -8, 0]);
+                this.graphics.endFill();
+            }
+            destroy() {
+                effectLayer.removeChild(this.graphics);
+                this.graphics.destroy();
             }
         }
 
         class EnemyBullet {
-            constructor() {}
+            constructor() {
+                this.graphics = new PIXI.Graphics();
+                bulletLayer.addChild(this.graphics);
+            }
             update() {
                 this.x += Math.cos(this.angle) * this.speed;
                 this.y += Math.sin(this.angle) * this.speed;
             }
             draw() {
-                ctx.save();
-                ctx.translate(this.x, this.y);
-                ctx.rotate(this.angle);
-                ctx.beginPath();
-                ctx.arc(0, 0, this.size / 2, 0, Math.PI * 2);
-                ctx.fillStyle = '#ef4444';
-                ctx.shadowColor = '#ef4444';
-                ctx.shadowBlur = this.isLargeRed ? 16 : 8;
-                ctx.fill();
-                ctx.restore();
+                this.graphics.clear();
+                this.graphics.position.set(this.x, this.y);
+                this.graphics.rotation = this.angle;
+                this.graphics.beginFill(0xef4444);
+                this.graphics.drawCircle(0, 0, this.size / 2);
+                this.graphics.endFill();
             }
         }
 
         class Enemy {
-            constructor() {}
+            constructor() {
+                this.graphics = new PIXI.Graphics();
+                enemyLayer.addChild(this.graphics);
+            }
             init(targetX = 0, targetY = 0) {
                 const elapsedSeconds = Math.floor(gameTime / 1000);
                 const elapsedMins = Math.floor(gameTime / 60000);
@@ -779,7 +785,7 @@
                     this.maxHp = bossHp;
                     this.damage = 25 + (elapsedMins * 2);
                     this.xpValue = 50;
-                    this.color = '#ef4444';
+                    this.color = 0xef4444;
                 } else if (this.type === 'xiaohong') {
                     this.size = 16;
                     this.speed = Math.min(2.0, 1.0 + (elapsedMins * 0.1));
@@ -788,7 +794,7 @@
                     this.maxHp = baseHp;
                     this.damage = 10;
                     this.xpValue = 1;
-                    this.color = '#ef4444';
+                    this.color = 0xef4444;
                 } else if (this.type === 'wasp') {
                     this.size = 16;
                     this.speed = 60.0;
@@ -797,7 +803,7 @@
                     this.maxHp = waspHp;
                     this.damage = 15;
                     this.xpValue = 2;
-                    this.color = '#eab308';
+                    this.color = 0xeab308;
                     this.state = 'warning';
                     this.warningTimer = 0;
                     this.pauseTimer = 0;
@@ -813,7 +819,7 @@
                     this.maxHp = zhuanzhuanHp;
                     this.damage = isUpgraded ? 30 : 10;
                     this.xpValue = isUpgraded ? 20 : 5;
-                    this.color = isUpgraded ? '#0284c7' : '#38bdf8';
+                    this.color = isUpgraded ? 0x0284c7 : 0x38bdf8;
 
                     const count = isUpgraded ? 3 : 1;
                     this.purpleBallAngles = [];
@@ -884,77 +890,61 @@
             }
 
             draw() {
-                ctx.save();
+                this.graphics.clear();
                 const isFlashing = this.flashTimer > performance.now();
-                const renderColor = isFlashing ? '#ffffff' : this.color;
+                const renderColor = isFlashing ? 0xffffff : this.color;
+
+                this.graphics.position.set(this.x, this.y);
 
                 if (this.type === 'wasp' && (this.state === 'warning' || this.state === 'pausing')) {
-                    ctx.save();
-                    ctx.beginPath();
-                    ctx.setLineDash([6, 6]);
-                    ctx.moveTo(this.x, this.y);
-                    ctx.lineTo(this.x + Math.cos(this.angle) * 2500, this.y + Math.sin(this.angle) * 2500);
-                    ctx.strokeStyle = '#ef4444';
-                    ctx.lineWidth = 2;
-                    ctx.stroke();
-                    ctx.restore();
+                    this.graphics.lineStyle(2, 0xef4444);
+                    this.graphics.moveTo(0, 0);
+                    this.graphics.lineTo(Math.cos(this.angle) * 2000, Math.sin(this.angle) * 2000);
                 }
-
-                ctx.translate(this.x, this.y);
 
                 if (this.type === 'zhuanzhuan') {
                     const totalSecs = Math.floor(gameTime / 1000);
                     const isUpgraded = totalSecs >= 300;
                     const coreRadius = isUpgraded ? 24 : 8;
-                    ctx.beginPath();
-                    ctx.arc(0, 0, coreRadius, 0, Math.PI * 2);
-                    ctx.fillStyle = renderColor;
-                    ctx.shadowColor = '#0ea5e9';
-                    ctx.shadowBlur = isUpgraded ? 20 : 10;
-                    ctx.fill();
+                    this.graphics.beginFill(renderColor);
+                    this.graphics.drawCircle(0, 0, coreRadius);
+                    this.graphics.endFill();
 
                     const orbitRadius = isUpgraded ? 144 : 48;
                     const ballRadius = isUpgraded ? 12 : 4;
                     for (let i = 0; i < this.purpleBallAngles.length; i++) {
                         const ballX = Math.cos(this.purpleBallAngles[i]) * orbitRadius;
                         const ballY = Math.sin(this.purpleBallAngles[i]) * orbitRadius;
-                        ctx.beginPath();
-                        ctx.arc(ballX, ballY, ballRadius, 0, Math.PI * 2);
-                        ctx.fillStyle = '#a855f7';
-                        ctx.shadowColor = '#c084fc';
-                        ctx.shadowBlur = isUpgraded ? 16 : 8;
-                        ctx.fill();
+                        this.graphics.beginFill(0xa855f7);
+                        this.graphics.drawCircle(ballX, ballY, ballRadius);
+                        this.graphics.endFill();
                     }
                 } else {
-                    if (this.type === 'boss') ctx.rotate(this.rotationAngle);
-                    else if (this.type === 'wasp') ctx.rotate(this.angle);
-                    else ctx.rotate(Math.atan2(player.y - this.y, player.x - this.x));
+                    if (this.type === 'boss') this.graphics.rotation = this.rotationAngle;
+                    else if (this.type === 'wasp') this.graphics.rotation = this.angle;
+                    else this.graphics.rotation = Math.atan2(player.y - this.y, player.x - this.x);
 
-                    ctx.beginPath();
                     const halfSize = this.size / 2;
-                    ctx.moveTo(halfSize, 0);
-                    ctx.lineTo(-halfSize, -halfSize);
-                    ctx.lineTo(-halfSize, halfSize);
-                    ctx.closePath();
-                    ctx.fillStyle = renderColor;
-                    ctx.shadowColor = renderColor;
-                    ctx.shadowBlur = this.type === 'boss' ? 16 : 8;
-                    ctx.fill();
+                    this.graphics.beginFill(renderColor);
+                    this.graphics.drawPolygon([halfSize, 0, -halfSize, -halfSize, -halfSize, halfSize]);
+                    this.graphics.endFill();
 
                     if (this.type === 'boss') {
-                        ctx.rotate(-this.rotationAngle);
-                        ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-                        ctx.fillRect(-20, -28, 40, 6);
-                        ctx.fillStyle = '#ef4444';
-                        ctx.fillRect(-20, -28, 40 * (Math.max(0, this.hp) / this.maxHp), 6);
+                        this.graphics.rotation = 0;
+                        this.graphics.beginFill(0x000000, 0.6);
+                        this.graphics.drawRect(-20, -28, 40, 6);
+                        this.graphics.beginFill(0xef4444);
+                        this.graphics.drawRect(-20, -28, 40 * (Math.max(0, this.hp) / this.maxHp), 6);
+                        this.graphics.endFill();
                     }
                 }
-                ctx.restore();
             }
         }
 
         class Bullet {
             constructor() {
+                this.graphics = new PIXI.Graphics();
+                bulletLayer.addChild(this.graphics);
                 this.hitEnemies = new Set();
             }
 
@@ -970,108 +960,85 @@
             }
 
             draw() {
-                ctx.save();
-                ctx.translate(this.x, this.y);
-                ctx.rotate(this.angle);
+                this.graphics.clear();
+                this.graphics.position.set(this.x, this.y);
+                this.graphics.rotation = this.angle;
 
                 if (this.isFireball) {
-                    ctx.fillStyle = 'rgba(249, 115, 22, 0.35)';
-                    ctx.beginPath();
-                    ctx.arc(0, 0, this.explosionRadius * 0.5, 0, Math.PI * 2);
-                    ctx.fill();
-
-                    ctx.fillStyle = '#ef4444';
-                    ctx.shadowColor = '#f97316';
-                    ctx.shadowBlur = 14;
-                    ctx.beginPath();
-                    ctx.arc(0, 0, 11, 0, Math.PI * 2);
-                    ctx.fill();
+                    this.graphics.beginFill(0xf97316, 0.35);
+                    this.graphics.drawCircle(0, 0, this.explosionRadius * 0.5);
+                    this.graphics.beginFill(0xef4444);
+                    this.graphics.drawCircle(0, 0, 11);
+                    this.graphics.endFill();
                 } else if (this.isSniper || this.isThunderSniper) {
                     const hw = this.width / 2;
                     const hh = this.height / 2;
-                    const grad = ctx.createLinearGradient(-hw, 0, hw, 0);
-                    grad.addColorStop(0, this.isThunderSniper ? 'rgba(234, 179, 8, 0)' : 'rgba(250, 204, 21, 0)');
-                    grad.addColorStop(0.6, this.isThunderSniper ? 'rgba(234, 179, 8, 0.8)' : 'rgba(250, 204, 21, 0.7)');
-                    grad.addColorStop(1, '#fef08a');
-                    ctx.fillStyle = grad;
-                    ctx.shadowColor = this.isThunderSniper ? '#eab308' : '#f59e0b';
-                    ctx.shadowBlur = this.isThunderSniper ? 22 : 18;
-                    ctx.fillRect(-hw, -hh, hw, this.height);
-                    ctx.beginPath();
-                    ctx.moveTo(hw, 0);
-                    ctx.lineTo(0, -hh);
-                    ctx.lineTo(0, hh);
-                    ctx.closePath();
-                    ctx.fill();
+                    this.graphics.beginFill(this.isThunderSniper ? 0xeab308 : 0xf59e0b);
+                    this.graphics.drawRect(-hw, -hh, hw, this.height);
+                    this.graphics.drawPolygon([hw, 0, 0, -hh, 0, hh]);
+                    this.graphics.endFill();
                 } else if (this.isVortex) {
-                    ctx.fillStyle = '#ffffff';
-                    ctx.shadowColor = '#38bdf8';
-                    ctx.shadowBlur = this.isMagicSpin ? 14 : 8;
-                    ctx.fillRect(-this.width / 2, -this.height / 2, this.width, this.height);
+                    this.graphics.beginFill(0xffffff);
+                    this.graphics.drawRect(-this.width / 2, -this.height / 2, this.width, this.height);
+                    this.graphics.endFill();
                 } else {
-                    ctx.fillStyle = this.isMagicFire ? '#f97316' : '#38bdf8';
-                    ctx.shadowColor = this.isMagicFire ? '#ea580c' : '#0284c7';
-                    ctx.shadowBlur = 10;
-                    ctx.beginPath();
-                    if (ctx.roundRect) ctx.roundRect(-this.width / 2, -this.height / 2, this.width, this.height, 2);
-                    else ctx.rect(-this.width / 2, -this.height / 2, this.width, this.height);
-                    ctx.fill();
+                    this.graphics.beginFill(this.isMagicFire ? 0xf97316 : 0x38bdf8);
+                    this.graphics.drawRoundedRect(-this.width / 2, -this.height / 2, this.width, this.height, 2);
+                    this.graphics.endFill();
                 }
-                ctx.restore();
             }
         }
 
         class Explosion {
-            constructor() {}
+            constructor() {
+                this.graphics = new PIXI.Graphics();
+                effectLayer.addChild(this.graphics);
+            }
             update(delta) {
                 this.elapsed += delta;
                 const progress = Math.min(1, this.elapsed / this.duration);
                 this.currentRadius = 4 + (this.maxRadius - 4) * progress;
             }
             draw() {
-                ctx.save();
-                ctx.beginPath();
-                ctx.arc(this.x, this.y, this.currentRadius, 0, Math.PI * 2);
-                ctx.fillStyle = 'rgba(249, 115, 22, 0.35)';
-                ctx.strokeStyle = '#f97316';
-                ctx.lineWidth = 3;
-                ctx.shadowColor = '#f97316';
-                ctx.shadowBlur = 16;
-                ctx.fill();
-                ctx.stroke();
-                ctx.restore();
+                this.graphics.clear();
+                this.graphics.position.set(this.x, this.y);
+                this.graphics.beginFill(0xf97316, 0.35);
+                this.graphics.lineStyle(3, 0xf97316);
+                this.graphics.drawCircle(0, 0, this.currentRadius);
+                this.graphics.endFill();
             }
         }
 
         class Gem {
-            constructor() {}
+            constructor() {
+                this.graphics = new PIXI.Graphics();
+                gemLayer.addChild(this.graphics);
+            }
             draw() {
-                ctx.save();
-                ctx.beginPath();
-                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
-                ctx.fillStyle = this.color;
-                ctx.shadowColor = this.color;
-                ctx.shadowBlur = 8;
-                ctx.fill();
-                ctx.restore();
+                this.graphics.clear();
+                this.graphics.position.set(this.x, this.y);
+                this.graphics.beginFill(this.color);
+                this.graphics.drawCircle(0, 0, this.radius);
+                this.graphics.endFill();
             }
         }
 
         class Particle {
-            constructor() {}
+            constructor() {
+                this.graphics = new PIXI.Graphics();
+                effectLayer.addChild(this.graphics);
+            }
             update() {
                 this.x += this.vx;
                 this.y += this.vy;
                 this.life -= this.decay;
             }
             draw() {
-                ctx.save();
-                ctx.globalAlpha = Math.max(0, this.life);
-                ctx.fillStyle = this.color;
-                ctx.beginPath();
-                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
-                ctx.fill();
-                ctx.restore();
+                this.graphics.clear();
+                this.graphics.position.set(this.x, this.y);
+                this.graphics.beginFill(this.color, Math.max(0, this.life));
+                this.graphics.drawCircle(0, 0, this.radius);
+                this.graphics.endFill();
             }
         }
 
@@ -1086,6 +1053,10 @@
                 this.elapsed = 0;
                 this.hasSpawnedBeams = false;
                 this.hasDealtDamage = false;
+
+                this.graphics = new PIXI.Graphics();
+                effectLayer.addChild(this.graphics);
+
                 this.orbs = [];
                 for (let i = 0; i < 3; i++) {
                     this.orbs.push({
@@ -1119,31 +1090,26 @@
                 }
             }
             draw() {
-                ctx.save();
+                this.graphics.clear();
                 this.orbs.forEach(orb => {
                     const orbX = this.x + Math.cos(orb.angle) * orb.radius;
                     const orbY = this.y + Math.sin(orb.angle) * orb.radius;
-                    ctx.beginPath();
-                    ctx.arc(orbX, orbY, 4, 0, Math.PI * 2);
-                    ctx.fillStyle = '#ffffff';
-                    ctx.shadowColor = '#ffffff';
-                    ctx.shadowBlur = 8;
-                    ctx.fill();
+                    this.graphics.beginFill(0xffffff);
+                    this.graphics.drawCircle(orbX, orbY, 4);
+                    this.graphics.endFill();
                 });
-                ctx.beginPath();
-                ctx.moveTo(this.x, this.y - 300);
-                ctx.lineTo(this.x, this.y);
-                ctx.strokeStyle = '#fef08a';
-                ctx.lineWidth = 4;
-                ctx.shadowColor = '#eab308';
-                ctx.shadowBlur = 15;
-                ctx.stroke();
-                ctx.restore();
+                this.graphics.lineStyle(4, 0xfef08a);
+                this.graphics.moveTo(this.x, this.y - 300);
+                this.graphics.lineTo(this.x, this.y);
+            }
+            destroy() {
+                effectLayer.removeChild(this.graphics);
+                this.graphics.destroy();
             }
         }
 
         // ==========================================
-        // 各類物件池 (Object Pool) 初始化（必須放在 Class 定義之後）
+        // 各類 Pixi.js 物件池 (Object Pool) 初始化
         // ==========================================
         const bulletPool = new ObjectPool(
             () => new Bullet(),
@@ -1181,7 +1147,7 @@
         const gemPool = new ObjectPool(
             () => new Gem(),
             (g, x, y, value, color) => {
-                g.x = x; g.y = y; g.value = value; g.color = color || '#10b981';
+                g.x = x; g.y = y; g.value = value; g.color = color === '#38bdf8' ? 0x38bdf8 : 0x10b981;
                 g.radius = value >= 50 ? 9 : (value >= 10 ? 7 : 4);
                 g.isMagnetized = false;
             },
@@ -1205,11 +1171,10 @@
 
         const floatingTextPool = new ObjectPool(
             () => new FloatingText(),
-            (ft, x, y, text, color) => {
+            (ft, x, y, text) => {
                 ft.x = x + (Math.random() * 16 - 8);
                 ft.y = y + (Math.random() * 16 - 8);
-                ft.text = text;
-                ft.color = color || '#facc15';
+                ft.textObj.text = String(text);
                 ft.life = 1.0;
                 ft.vy = -1.2;
                 ft.decay = 0.03;
@@ -1657,14 +1622,21 @@
                 }
             });
 
-            player = new Player(GAME_WIDTH / 2, GAME_HEIGHT / 2);
-            gameTime = 0;
+            // 清理舊有的物體圖層
+            [bullets, enemyBullets, enemies, gems, particles, floatingTexts, explosions, lightningBeams].forEach(arr => {
+                arr.forEach(item => {
+                    if (item.graphics) item.graphics.visible = false;
+                    if (item.textObj) item.textObj.visible = false;
+                });
+            });
+
+            vortexStars.forEach(vs => vs.destroy());
+            lightnings.forEach(l => l.destroy());
 
             bullets = [];
             enemyBullets = [];
             enemies = [];
             gems = [];
-            specialItems = [];
             particles = [];
             floatingTexts = [];
             explosions = [];
@@ -1672,6 +1644,16 @@
             lightningBeams = [];
             vortexStars = [];
 
+            if (!player) player = new Player(GAME_WIDTH / 2, GAME_HEIGHT / 2);
+            else {
+                player.x = GAME_WIDTH / 2;
+                player.y = GAME_HEIGHT / 2;
+                player.hp = 100; player.maxHp = 100;
+                player.level = 1; player.xp = 0; player.nextXp = 1;
+                player.damageLevel = 0; player.maxHpLevel = 0; player.speedLevel = 0;
+            }
+
+            gameTime = 0;
             killsCount = 0;
             shieldDurationTimer = 0;
             bossSpawnMilestones = {};
@@ -1684,14 +1666,15 @@
             lastTimestamp = performance.now();
 
             updateHUD();
-            if (animationFrameId) cancelAnimationFrame(animationFrameId);
-            animationFrameId = requestAnimationFrame(gameLoop);
+            app.ticker.remove(gameLoop);
+            app.ticker.add(gameLoop);
         }
 
-        function gameLoop(timestamp) {
+        function gameLoop() {
             if (!isGameRunning) return;
-            const delta = timestamp - lastTimestamp;
-            lastTimestamp = timestamp;
+            const now = performance.now();
+            const delta = now - lastTimestamp;
+            lastTimestamp = now;
 
             if (!isPaused) {
                 gameTime += delta;
@@ -1766,20 +1749,26 @@
                 }
                 player.move(dx, dy);
 
-                fireMagicBullets(timestamp);
-                fireSniperBullets(timestamp);
-                fireBullets(timestamp);
-                fireSpinBullets(timestamp);
-                triggerLightning(timestamp);
+                fireMagicBullets(now);
+                fireSniperBullets(now);
+                fireBullets(now);
+                fireSpinBullets(now);
+                triggerLightning(now);
 
-                vortexStars.forEach((vs, index) => {
-                    vs.update(delta, timestamp);
-                    if (vs.elapsed >= vs.duration) vortexStars.splice(index, 1);
-                });
+                for (let i = vortexStars.length - 1; i >= 0; i--) {
+                    const vs = vortexStars[i];
+                    vs.update(delta, now);
+                    vs.draw();
+                    if (vs.elapsed >= vs.duration) {
+                        vs.destroy();
+                        vortexStars.splice(i, 1);
+                    }
+                }
 
                 for (let i = bullets.length - 1; i >= 0; i--) {
                     const b = bullets[i];
                     b.update(delta);
+                    b.draw();
                     if (b.x < 0 || b.x > GAME_WIDTH || b.y < 0 || b.y > GAME_HEIGHT || (b.isVortex && b.elapsed >= b.maxLifetime)) {
                         bullets.splice(i, 1);
                         bulletPool.release(b);
@@ -1789,6 +1778,7 @@
                 for (let i = lightningBeams.length - 1; i >= 0; i--) {
                     const beam = lightningBeams[i];
                     beam.update();
+                    beam.draw();
                     if (beam.x < 0 || beam.x > GAME_WIDTH || beam.y < 0 || beam.y > GAME_HEIGHT) {
                         lightningBeams.splice(i, 1);
                         lightningBeamPool.release(beam);
@@ -1814,6 +1804,7 @@
                 for (let i = enemyBullets.length - 1; i >= 0; i--) {
                     const eb = enemyBullets[i];
                     eb.update();
+                    eb.draw();
                     if (eb.x < 0 || eb.x > GAME_WIDTH || eb.y < 0 || eb.y > GAME_HEIGHT) {
                         enemyBullets.splice(i, 1);
                         enemyBulletPool.release(eb);
@@ -1821,7 +1812,7 @@
                     }
                     const dist = Math.hypot(eb.x - player.x, eb.y - player.y);
                     if (dist < (eb.size / 2) + player.radius) {
-                        player.takeDamage(eb.damage, timestamp);
+                        player.takeDamage(eb.damage, now);
                         audio.playHit();
                         enemyBullets.splice(i, 1);
                         enemyBulletPool.release(eb);
@@ -1831,6 +1822,7 @@
                 for (let i = explosions.length - 1; i >= 0; i--) {
                     const ex = explosions[i];
                     ex.update(delta);
+                    ex.draw();
                     enemies.forEach(en => {
                         const dist = Math.hypot(en.x - ex.x, en.y - ex.y);
                         if (dist <= ex.currentRadius + en.size / 2) en.takeDamage(ex.damage);
@@ -1841,10 +1833,15 @@
                     }
                 }
 
-                lightnings.forEach((l, index) => {
+                for (let i = lightnings.length - 1; i >= 0; i--) {
+                    const l = lightnings[i];
                     l.update(delta);
-                    if (l.elapsed >= l.duration) lightnings.splice(index, 1);
-                });
+                    l.draw();
+                    if (l.elapsed >= l.duration) {
+                        l.destroy();
+                        lightnings.splice(i, 1);
+                    }
+                }
 
                 for (let i = bullets.length - 1; i >= 0; i--) {
                     const b = bullets[i];
@@ -1881,10 +1878,11 @@
 
                 for (let i = enemies.length - 1; i >= 0; i--) {
                     const en = enemies[i];
-                    en.update(timestamp, delta);
+                    en.update(now, delta);
+                    en.draw();
 
                     if (Math.hypot(en.x - player.x, en.y - player.y) < en.size / 2 + player.radius) {
-                        player.takeDamage(en.damage, timestamp);
+                        player.takeDamage(en.damage, now);
                         audio.playHit();
                     }
 
@@ -1912,13 +1910,16 @@
                             player.addXp(g.value);
                             gems.splice(i, 1);
                             gemPool.release(g);
+                            continue;
                         }
                     }
+                    g.draw();
                 }
 
                 for (let i = particles.length - 1; i >= 0; i--) {
                     const pt = particles[i];
                     pt.update();
+                    pt.draw();
                     if (pt.life <= 0) {
                         particles.splice(i, 1);
                         particlePool.release(pt);
@@ -1933,37 +1934,14 @@
                         floatingTextPool.release(ft);
                     }
                 }
+
+                player.draw();
             }
-
-            ctx.clearRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
-
-            ctx.strokeStyle = '#1a1f35';
-            ctx.lineWidth = 1;
-            const gridSize = 60;
-            ctx.beginPath();
-            for (let x = 0; x < GAME_WIDTH; x += gridSize) { ctx.moveTo(x, 0); ctx.lineTo(x, GAME_HEIGHT); }
-            for (let y = 0; y < GAME_HEIGHT; y += gridSize) { ctx.moveTo(0, y); ctx.lineTo(GAME_WIDTH, y); }
-            ctx.stroke();
-
-            particles.forEach(pt => pt.draw());
-            gems.forEach(g => g.draw());
-            specialItems.forEach(item => item.draw());
-            enemies.forEach(en => en.draw());
-            vortexStars.forEach(vs => vs.draw());
-            bullets.forEach(b => b.draw());
-            lightningBeams.forEach(beam => beam.draw());
-            enemyBullets.forEach(eb => eb.draw());
-            explosions.forEach(ex => ex.draw());
-            lightnings.forEach(l => l.draw());
-            floatingTexts.forEach(ft => ft.draw());
-            player.draw();
-
-            animationFrameId = requestAnimationFrame(gameLoop);
         }
 
         function gameOver(isVictory) {
             isGameRunning = false;
-            cancelAnimationFrame(animationFrameId);
+            app.ticker.remove(gameLoop);
             hud.classList.add('hidden');
             upgradeModal.classList.add('hidden');
             menuModal.classList.add('hidden');
