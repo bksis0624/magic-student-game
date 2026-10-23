@@ -250,6 +250,36 @@
             }
         }
 
+        // ==========================================
+        // 通用物件池 (Object Pool) 實作
+        // ==========================================
+        class ObjectPool {
+            constructor(createFn, resetFn, initialSize = 50) {
+                this.createFn = createFn;
+                this.resetFn = resetFn;
+                this.pool = [];
+                for (let i = 0; i < initialSize; i++) {
+                    const obj = this.createFn();
+                    obj._inPool = true;
+                    this.pool.push(obj);
+                }
+            }
+
+            get(...args) {
+                let obj = this.pool.length > 0 ? this.pool.pop() : this.createFn();
+                obj._inPool = false;
+                this.resetFn(obj, ...args);
+                return obj;
+            }
+
+            release(obj) {
+                if (obj && !obj._inPool) {
+                    obj._inPool = true;
+                    this.pool.push(obj);
+                }
+            }
+        }
+
         const audio = new SoundEffects();
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
@@ -474,6 +504,9 @@
         });
         canvas.addEventListener('touchend', () => { touchActive = false; });
 
+        // ==========================================
+        // 遊戲物件類別定義 (必須先於物件池宣告)
+        // ==========================================
         class Player {
             constructor(x, y) {
                 this.x = x;
@@ -563,25 +596,21 @@
                 ctx.shadowBlur = 12;
                 ctx.fill();
 
-                // 玩家頭頂血條與等級 UI
                 const barWidth = 48;
                 const barHeight = 6;
                 const barX = this.x - barWidth / 2;
                 const barY = this.y - this.radius - 18;
 
-                // 血條背景底框
                 ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
                 ctx.strokeStyle = 'rgba(51, 65, 85, 0.8)';
                 ctx.lineWidth = 1;
                 ctx.fillRect(barX - 1, barY - 1, barWidth + 2, barHeight + 2);
                 ctx.strokeRect(barX - 1, barY - 1, barWidth + 2, barHeight + 2);
 
-                // 血條 Fill
                 const hpRatio = Math.max(0, Math.min(1, this.hp / this.maxHp));
                 ctx.fillStyle = hpRatio > 0.5 ? '#f43f5e' : hpRatio > 0.25 ? '#f59e0b' : '#ef4444';
                 ctx.fillRect(barX, barY, barWidth * hpRatio, barHeight);
 
-                // 等級與文字標示
                 ctx.font = 'bold 10px monospace';
                 ctx.fillStyle = '#fbbf24';
                 ctx.textAlign = 'center';
@@ -594,15 +623,7 @@
         }
 
         class FloatingText {
-            constructor(x, y, text, color = '#facc15') {
-                this.x = x + (Math.random() * 16 - 8);
-                this.y = y + (Math.random() * 16 - 8);
-                this.text = text;
-                this.color = color;
-                this.life = 1.0;
-                this.vy = -1.2;
-                this.decay = 0.03;
-            }
+            constructor() {}
             update() {
                 this.y += this.vy;
                 this.life -= this.decay;
@@ -643,15 +664,7 @@
         }
 
         class LightningBeam {
-            constructor(x, y, angle, damage, isPiercing = true) {
-                this.x = x;
-                this.y = y;
-                this.angle = angle;
-                this.damage = damage;
-                this.speed = 8.0;
-                this.length = 48;
-                this.width = 5;
-                this.isPiercing = isPiercing;
+            constructor() {
                 this.hitEnemies = new Set();
             }
             update() {
@@ -705,7 +718,7 @@
                     const spiralCount = this.isMagicSpin ? this.bulletCount * 3 : this.bulletCount;
                     for (let i = 0; i < spiralCount; i++) {
                         const bulletAngle = this.angle + (Math.PI * 2 / spiralCount) * i;
-                        bullets.push(new Bullet(
+                        bullets.push(bulletPool.get(
                             this.x, this.y, bulletAngle, finalDamage, 7.0, this.penetration, 8, 8, false, false, 35, true, this.isMagicSpin
                         ));
                     }
@@ -730,15 +743,7 @@
         }
 
         class EnemyBullet {
-            constructor(x, y, angle, speed = 4, size = 8, damage = 10, isLargeRed = false) {
-                this.x = x;
-                this.y = y;
-                this.angle = angle;
-                this.speed = speed;
-                this.size = size;
-                this.damage = damage;
-                this.isLargeRed = isLargeRed;
-            }
+            constructor() {}
             update() {
                 this.x += Math.cos(this.angle) * this.speed;
                 this.y += Math.sin(this.angle) * this.speed;
@@ -758,21 +763,15 @@
         }
 
         class Enemy {
-            constructor(x, y, type, targetX = 0, targetY = 0) {
-                this.x = x;
-                this.y = y;
-                this.type = type;
-                this.flashTimer = 0;
-                this.rotationAngle = 0;
-                this.shootTimer = 0;
-                
+            constructor() {}
+            init(targetX = 0, targetY = 0) {
                 const elapsedSeconds = Math.floor(gameTime / 1000);
                 const elapsedMins = Math.floor(gameTime / 60000);
                 let hpMultiplier = 1;
                 if (elapsedSeconds >= 720) hpMultiplier = 4;
                 else if (elapsedSeconds >= 600) hpMultiplier = 2;
 
-                if (type === 'boss') {
+                if (this.type === 'boss') {
                     this.size = 32;
                     this.speed = Math.min(2.5, 1.0 + (elapsedMins * 0.1));
                     const bossHp = (500 + Math.floor(elapsedSeconds / 30) * 500) * hpMultiplier;
@@ -781,7 +780,7 @@
                     this.damage = 25 + (elapsedMins * 2);
                     this.xpValue = 50;
                     this.color = '#ef4444';
-                } else if (type === 'xiaohong') {
+                } else if (this.type === 'xiaohong') {
                     this.size = 16;
                     this.speed = Math.min(2.0, 1.0 + (elapsedMins * 0.1));
                     const baseHp = (10 + (elapsedSeconds * 0.5)) * hpMultiplier;
@@ -790,7 +789,7 @@
                     this.damage = 10;
                     this.xpValue = 1;
                     this.color = '#ef4444';
-                } else if (type === 'wasp') {
+                } else if (this.type === 'wasp') {
                     this.size = 16;
                     this.speed = 60.0;
                     const waspHp = 15 * hpMultiplier;
@@ -803,7 +802,7 @@
                     this.warningTimer = 0;
                     this.pauseTimer = 0;
                     this.angle = Math.atan2(player.y - this.y, player.x - this.x);
-                } else if (type === 'zhuanzhuan') {
+                } else if (this.type === 'zhuanzhuan') {
                     const totalSecs = Math.floor(gameTime / 1000);
                     const isUpgraded = totalSecs >= 300;
                     this.size = isUpgraded ? 48 : 16;
@@ -823,10 +822,10 @@
                     }
                     this.vx = 0;
                     this.vy = 0;
-                    const dist = Math.hypot(targetX - x, targetY - y);
+                    const dist = Math.hypot(targetX - this.x, targetY - this.y);
                     if (dist > 0) {
-                        this.vx = ((targetX - x) / dist) * this.speed;
-                        this.vy = ((targetY - y) / dist) * this.speed;
+                        this.vx = ((targetX - this.x) / dist) * this.speed;
+                        this.vy = ((targetY - this.y) / dist) * this.speed;
                     }
                 }
             }
@@ -834,7 +833,7 @@
             takeDamage(amount) {
                 this.hp -= amount;
                 this.flashTimer = performance.now() + 80;
-                floatingTexts.push(new FloatingText(this.x, this.y - this.size / 2, Math.round(amount)));
+                floatingTexts.push(floatingTextPool.get(this.x, this.y - this.size / 2, Math.round(amount)));
             }
 
             update(now, delta) {
@@ -872,13 +871,13 @@
                         if (this.shootTimer >= 1500) {
                             this.shootTimer = 0;
                             const angleToPlayer = Math.atan2(player.y - this.y, player.x - this.x);
-                            enemyBullets.push(new EnemyBullet(this.x, this.y, angleToPlayer, 3.0, 8, 30, true));
+                            enemyBullets.push(enemyBulletPool.get(this.x, this.y, angleToPlayer, 3.0, 8, 30, true));
                         }
                     } else {
                         if (this.shootTimer >= 1800) {
                             this.shootTimer = 0;
                             const angleToPlayer = Math.atan2(player.y - this.y, player.x - this.x);
-                            enemyBullets.push(new EnemyBullet(this.x, this.y, angleToPlayer, 3.5, 8, 10, false));
+                            enemyBullets.push(enemyBulletPool.get(this.x, this.y, angleToPlayer, 3.5, 8, 10, false));
                         }
                     }
                 }
@@ -955,31 +954,8 @@
         }
 
         class Bullet {
-            constructor(x, y, angle, damage, speed, penetration, width, height, isFireball = false, isSniper = false, explosionRadius = 35, isVortex = false, isMagicSpin = false, fireballBaseDamage = 0, isThunderSniper = false, sniperBaseDamage = 0, isMagicFire = false, magicFireDamage = 0) {
-                this.x = x;
-                this.y = y;
-                this.angle = angle;
-                this.damage = damage;
-                this.speed = speed;
-                this.penetration = penetration;
-                this.hits = 0;
-                this.width = width;
-                this.height = height;
-                this.isFireball = isFireball;
-                this.isSniper = isSniper;
-                this.explosionRadius = explosionRadius;
-                this.isVortex = isVortex;
-                this.isMagicSpin = isMagicSpin;
-                this.fireballBaseDamage = fireballBaseDamage;
-                this.isThunderSniper = isThunderSniper;
-                this.sniperBaseDamage = sniperBaseDamage;
-                this.isMagicFire = isMagicFire;
-                this.magicFireDamage = magicFireDamage;
-                this.prevX = x;
-                this.prevY = y;
+            constructor() {
                 this.hitEnemies = new Set();
-                this.elapsed = 0;
-                this.maxLifetime = isVortex ? 5000 : 0;
             }
 
             update(delta) {
@@ -1046,15 +1022,7 @@
         }
 
         class Explosion {
-            constructor(x, y, damage, maxRadius = 18) {
-                this.x = x;
-                this.y = y;
-                this.damage = damage; 
-                this.currentRadius = 4;
-                this.maxRadius = maxRadius;
-                this.duration = 120;
-                this.elapsed = 0;
-            }
+            constructor() {}
             update(delta) {
                 this.elapsed += delta;
                 const progress = Math.min(1, this.elapsed / this.duration);
@@ -1076,14 +1044,7 @@
         }
 
         class Gem {
-            constructor(x, y, value, color = '#10b981') {
-                this.x = x;
-                this.y = y;
-                this.value = value;
-                this.color = color;
-                this.radius = value >= 50 ? 9 : (value >= 10 ? 7 : 4);
-                this.isMagnetized = false;
-            }
+            constructor() {}
             draw() {
                 ctx.save();
                 ctx.beginPath();
@@ -1097,18 +1058,7 @@
         }
 
         class Particle {
-            constructor(x, y, color) {
-                this.x = x;
-                this.y = y;
-                this.color = color;
-                this.radius = Math.random() * 2.5 + 1;
-                const angle = Math.random() * Math.PI * 2;
-                const speed = Math.random() * 3 + 1;
-                this.vx = Math.cos(angle) * speed;
-                this.vy = Math.sin(angle) * speed;
-                this.life = 1.0;
-                this.decay = Math.random() * 0.04 + 0.02;
-            }
+            constructor() {}
             update() {
                 this.x += this.vx;
                 this.y += this.vy;
@@ -1164,7 +1114,7 @@
                     this.hasSpawnedBeams = true;
                     for (let i = 0; i < 3; i++) {
                         const angle = Math.random() * Math.PI * 2;
-                        lightningBeams.push(new LightningBeam(this.x, this.y, angle, this.beamDamage, true));
+                        lightningBeams.push(lightningBeamPool.get(this.x, this.y, angle, this.beamDamage, true));
                     }
                 }
             }
@@ -1191,6 +1141,102 @@
                 ctx.restore();
             }
         }
+
+        // ==========================================
+        // 各類物件池 (Object Pool) 初始化（必須放在 Class 定義之後）
+        // ==========================================
+        const bulletPool = new ObjectPool(
+            () => new Bullet(),
+            (b, x, y, angle, damage, speed, penetration, width, height, isFireball, isSniper, explosionRadius, isVortex, isMagicSpin, fireballBaseDamage, isThunderSniper, sniperBaseDamage, isMagicFire, magicFireDamage) => {
+                b.x = x; b.y = y; b.angle = angle; b.damage = damage; b.speed = speed;
+                b.penetration = penetration; b.hits = 0; b.width = width; b.height = height;
+                b.isFireball = isFireball; b.isSniper = isSniper; b.explosionRadius = explosionRadius;
+                b.isVortex = isVortex; b.isMagicSpin = isMagicSpin; b.fireballBaseDamage = fireballBaseDamage;
+                b.isThunderSniper = isThunderSniper; b.sniperBaseDamage = sniperBaseDamage;
+                b.isMagicFire = isMagicFire; b.magicFireDamage = magicFireDamage;
+                b.prevX = x; b.prevY = y; b.elapsed = 0; b.maxLifetime = isVortex ? 5000 : 0;
+                b.hitEnemies.clear();
+            },
+            100
+        );
+
+        const enemyBulletPool = new ObjectPool(
+            () => new EnemyBullet(),
+            (eb, x, y, angle, speed, size, damage, isLargeRed) => {
+                eb.x = x; eb.y = y; eb.angle = angle; eb.speed = speed || 4;
+                eb.size = size || 8; eb.damage = damage || 10; eb.isLargeRed = !!isLargeRed;
+            },
+            50
+        );
+
+        const enemyPool = new ObjectPool(
+            () => new Enemy(),
+            (en, x, y, type, targetX, targetY) => {
+                en.x = x; en.y = y; en.type = type; en.flashTimer = 0;
+                en.rotationAngle = 0; en.shootTimer = 0; en.init(targetX, targetY);
+            },
+            100
+        );
+
+        const gemPool = new ObjectPool(
+            () => new Gem(),
+            (g, x, y, value, color) => {
+                g.x = x; g.y = y; g.value = value; g.color = color || '#10b981';
+                g.radius = value >= 50 ? 9 : (value >= 10 ? 7 : 4);
+                g.isMagnetized = false;
+            },
+            100
+        );
+
+        const particlePool = new ObjectPool(
+            () => new Particle(),
+            (pt, x, y, color) => {
+                pt.x = x; pt.y = y; pt.color = color;
+                pt.radius = Math.random() * 2.5 + 1;
+                const angle = Math.random() * Math.PI * 2;
+                const speed = Math.random() * 3 + 1;
+                pt.vx = Math.cos(angle) * speed;
+                pt.vy = Math.sin(angle) * speed;
+                pt.life = 1.0;
+                pt.decay = Math.random() * 0.04 + 0.02;
+            },
+            150
+        );
+
+        const floatingTextPool = new ObjectPool(
+            () => new FloatingText(),
+            (ft, x, y, text, color) => {
+                ft.x = x + (Math.random() * 16 - 8);
+                ft.y = y + (Math.random() * 16 - 8);
+                ft.text = text;
+                ft.color = color || '#facc15';
+                ft.life = 1.0;
+                ft.vy = -1.2;
+                ft.decay = 0.03;
+            },
+            50
+        );
+
+        const explosionPool = new ObjectPool(
+            () => new Explosion(),
+            (ex, x, y, damage, maxRadius) => {
+                ex.x = x; ex.y = y; ex.damage = damage;
+                ex.currentRadius = 4; ex.maxRadius = maxRadius || 18;
+                ex.duration = 120; ex.elapsed = 0;
+            },
+            20
+        );
+
+        const lightningBeamPool = new ObjectPool(
+            () => new LightningBeam(),
+            (beam, x, y, angle, damage, isPiercing) => {
+                beam.x = x; beam.y = y; beam.angle = angle; beam.damage = damage;
+                beam.speed = 8.0; beam.length = 48; beam.width = 5;
+                beam.isPiercing = isPiercing !== undefined ? isPiercing : true;
+                beam.hitEnemies.clear();
+            },
+            30
+        );
 
         function fireMagicBullets(now) {
             if (!skillConfigs.magicBullet || !skillConfigs.magicBullet.enabled) return;
@@ -1227,7 +1273,7 @@
 
             for (let i = 0; i < cfg.count; i++) {
                 const angle = startAngle + spread * i;
-                bullets.push(new Bullet(
+                bullets.push(bulletPool.get(
                     player.x, player.y, angle, finalDamage, 7, finalPen, 16, 6, 
                     false, false, 35, false, false, 0, false, 0, hasMagicFireUnlocked, magicFireDmg
                 ));
@@ -1238,7 +1284,7 @@
                 const offStartAngle = offsetAngle - (spread * (cfg.count - 1)) / 2;
                 for (let i = 0; i < cfg.count; i++) {
                     const angle = offStartAngle + spread * i;
-                    bullets.push(new Bullet(
+                    bullets.push(bulletPool.get(
                         player.x, player.y, angle, finalDamage, 7, finalPen, 16, 6, 
                         false, false, 35, false, false, 0, false, 0, hasMagicFireUnlocked, magicFireDmg
                     ));
@@ -1280,7 +1326,7 @@
 
             for (let i = 0; i < cfg.count; i++) {
                 const angle = startAngle + spread * i;
-                bullets.push(new Bullet(
+                bullets.push(bulletPool.get(
                     player.x, player.y, angle, finalDamage, 45, cfg.penetration || 1, bulletWidth, bulletHeight, false, !hasThunderSniperUnlocked, 35, false, false, 0, hasThunderSniperUnlocked, cfg.baseDamage
                 ));
             }
@@ -1316,7 +1362,7 @@
             const startAngle = targetAngle - (spread * (cfg.count - 1)) / 2;
             for (let i = 0; i < cfg.count; i++) {
                 const angle = startAngle + spread * i + (Math.random() * 0.05 - 0.025);
-                bullets.push(new Bullet(player.x, player.y, angle, finalDamage, 5.5, 1, 16, 16, true, false, cfg.explosionRadius, false, false, cfg.baseDamage));
+                bullets.push(bulletPool.get(player.x, player.y, angle, finalDamage, 5.5, 1, 16, 16, true, false, cfg.explosionRadius, false, false, cfg.baseDamage));
             }
         }
 
@@ -1382,7 +1428,7 @@
                     else if (side === 1) { x = GAME_WIDTH + offset; y = Math.random() * GAME_HEIGHT; }
                     else if (side === 2) { x = Math.random() * GAME_WIDTH; y = GAME_HEIGHT + offset; }
                     else { x = -offset; y = Math.random() * GAME_HEIGHT; }
-                    enemies.push(new Enemy(x, y, 'wasp'));
+                    enemies.push(enemyPool.get(x, y, 'wasp'));
                 }
             } else {
                 const xiaohongCount = isAfter12Mins ? 99 : (1 + Math.floor(elapsedSeconds / 15));
@@ -1395,7 +1441,7 @@
                     else if (side === 1) { x = GAME_WIDTH + offset; y = Math.random() * GAME_HEIGHT; }
                     else if (side === 2) { x = Math.random() * GAME_WIDTH; y = GAME_HEIGHT + offset; }
                     else { x = -offset; y = Math.random() * GAME_HEIGHT; }
-                    enemies.push(new Enemy(x, y, 'xiaohong'));
+                    enemies.push(enemyPool.get(x, y, 'xiaohong'));
                 }
             }
         }
@@ -1424,7 +1470,7 @@
                 else if (targetSide === 2) { targetX = Math.random() * GAME_WIDTH; targetY = GAME_HEIGHT + margin; }
                 else { targetX = -margin; targetY = Math.random() * GAME_HEIGHT; }
 
-                enemies.push(new Enemy(startX, startY, 'zhuanzhuan', targetX, targetY));
+                enemies.push(enemyPool.get(startX, startY, 'zhuanzhuan', targetX, targetY));
             }
         }
 
@@ -1444,7 +1490,7 @@
                 else if (side === 1) { x = GAME_WIDTH + offset; y = Math.random() * GAME_HEIGHT; }
                 else if (side === 2) { x = Math.random() * GAME_WIDTH; y = GAME_HEIGHT + offset; }
                 else { x = -offset; y = Math.random() * GAME_HEIGHT; }
-                enemies.push(new Enemy(x, y, 'boss'));
+                enemies.push(enemyPool.get(x, y, 'boss'));
             }
         }
 
@@ -1731,18 +1777,21 @@
                     if (vs.elapsed >= vs.duration) vortexStars.splice(index, 1);
                 });
 
-                bullets.forEach((b, index) => {
+                for (let i = bullets.length - 1; i >= 0; i--) {
+                    const b = bullets[i];
                     b.update(delta);
                     if (b.x < 0 || b.x > GAME_WIDTH || b.y < 0 || b.y > GAME_HEIGHT || (b.isVortex && b.elapsed >= b.maxLifetime)) {
-                        bullets.splice(index, 1);
+                        bullets.splice(i, 1);
+                        bulletPool.release(b);
                     }
-                });
+                }
 
                 for (let i = lightningBeams.length - 1; i >= 0; i--) {
                     const beam = lightningBeams[i];
                     beam.update();
                     if (beam.x < 0 || beam.x > GAME_WIDTH || beam.y < 0 || beam.y > GAME_HEIGHT) {
                         lightningBeams.splice(i, 1);
+                        lightningBeamPool.release(beam);
                         continue;
                     }
                     for (let j = 0; j < enemies.length; j++) {
@@ -1753,33 +1802,44 @@
                             beam.hitEnemies.add(en);
                             en.takeDamage(beam.damage);
                             audio.playHit();
-                            if (!beam.isPiercing) { lightningBeams.splice(i, 1); break; }
+                            if (!beam.isPiercing) {
+                                lightningBeams.splice(i, 1);
+                                lightningBeamPool.release(beam);
+                                break;
+                            }
                         }
                     }
                 }
 
-                enemyBullets.forEach((eb, index) => {
+                for (let i = enemyBullets.length - 1; i >= 0; i--) {
+                    const eb = enemyBullets[i];
                     eb.update();
                     if (eb.x < 0 || eb.x > GAME_WIDTH || eb.y < 0 || eb.y > GAME_HEIGHT) {
-                        enemyBullets.splice(index, 1);
-                        return;
+                        enemyBullets.splice(i, 1);
+                        enemyBulletPool.release(eb);
+                        continue;
                     }
                     const dist = Math.hypot(eb.x - player.x, eb.y - player.y);
                     if (dist < (eb.size / 2) + player.radius) {
                         player.takeDamage(eb.damage, timestamp);
                         audio.playHit();
-                        enemyBullets.splice(index, 1);
+                        enemyBullets.splice(i, 1);
+                        enemyBulletPool.release(eb);
                     }
-                });
+                }
 
-                explosions.forEach((ex, index) => {
+                for (let i = explosions.length - 1; i >= 0; i--) {
+                    const ex = explosions[i];
                     ex.update(delta);
                     enemies.forEach(en => {
                         const dist = Math.hypot(en.x - ex.x, en.y - ex.y);
                         if (dist <= ex.currentRadius + en.size / 2) en.takeDamage(ex.damage);
                     });
-                    if (ex.elapsed >= ex.duration) explosions.splice(index, 1);
-                });
+                    if (ex.elapsed >= ex.duration) {
+                        explosions.splice(i, 1);
+                        explosionPool.release(ex);
+                    }
+                }
 
                 lightnings.forEach((l, index) => {
                     l.update(delta);
@@ -1802,13 +1862,18 @@
                             audio.playHit();
 
                             if (b.isFireball) {
-                                explosions.push(new Explosion(b.x, b.y, (b.fireballBaseDamage * player.damageMultiplier) / 2, b.explosionRadius));
+                                explosions.push(explosionPool.get(b.x, b.y, (b.fireballBaseDamage * player.damageMultiplier) / 2, b.explosionRadius));
                                 audio.playExplosion();
                                 bullets.splice(i, 1);
+                                bulletPool.release(b);
                                 break;
                             } else {
                                 b.hits++;
-                                if (b.hits >= b.penetration) { bullets.splice(i, 1); break; }
+                                if (b.hits >= b.penetration) {
+                                    bullets.splice(i, 1);
+                                    bulletPool.release(b);
+                                    break;
+                                }
                             }
                         }
                     }
@@ -1827,14 +1892,16 @@
                         killsCount++;
                         updateHUD();
                         for (let p = 0; p < 5; p++) {
-                            particles.push(new Particle(en.x, en.y, en.color));
+                            particles.push(particlePool.get(en.x, en.y, en.color));
                         }
-                        gems.push(new Gem(en.x, en.y, en.xpValue, '#38bdf8'));
+                        gems.push(gemPool.get(en.x, en.y, en.xpValue, '#38bdf8'));
                         enemies.splice(i, 1);
+                        enemyPool.release(en);
                     }
                 }
 
-                gems.forEach((g, index) => {
+                for (let i = gems.length - 1; i >= 0; i--) {
+                    const g = gems[i];
                     const dist = Math.hypot(g.x - player.x, g.y - player.y);
                     if (g.isMagnetized || dist < 85) {
                         g.isMagnetized = true;
@@ -1843,13 +1910,29 @@
                         g.y += Math.sin(angle) * 15.0;
                         if (dist < player.radius + g.radius) {
                             player.addXp(g.value);
-                            gems.splice(index, 1);
+                            gems.splice(i, 1);
+                            gemPool.release(g);
                         }
                     }
-                });
+                }
 
-                particles.forEach((pt, index) => { pt.update(); if (pt.life <= 0) particles.splice(index, 1); });
-                floatingTexts.forEach((ft, index) => { ft.update(); if (ft.life <= 0) floatingTexts.splice(index, 1); });
+                for (let i = particles.length - 1; i >= 0; i--) {
+                    const pt = particles[i];
+                    pt.update();
+                    if (pt.life <= 0) {
+                        particles.splice(i, 1);
+                        particlePool.release(pt);
+                    }
+                }
+
+                for (let i = floatingTexts.length - 1; i >= 0; i--) {
+                    const ft = floatingTexts[i];
+                    ft.update();
+                    if (ft.life <= 0) {
+                        floatingTexts.splice(i, 1);
+                        floatingTextPool.release(ft);
+                    }
+                }
             }
 
             ctx.clearRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
