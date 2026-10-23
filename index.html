@@ -1175,7 +1175,7 @@
                 g.radius = value >= 50 ? 9 : (value >= 10 ? 7 : 4);
                 g.isMagnetized = false;
             },
-            100
+            200
         );
 
         const particlePool = new ObjectPool(
@@ -1398,8 +1398,9 @@
         }
 
         function spawnEnemy() {
+            // 小兵數量上限限制為 100
             const currentNonBossCount = enemies.filter(e => e.type !== 'boss').length;
-            if (currentNonBossCount >= 300) return;
+            if (currentNonBossCount >= 100) return;
 
             const isWaspGroup = Math.random() < 0.3;
             const elapsedSeconds = Math.floor(gameTime / 1000);
@@ -1409,7 +1410,7 @@
                 audio.playWarning();
                 const count = isAfter12Mins ? (Math.floor(Math.random() * 4) + 3) : (Math.floor(Math.random() * 5) + 1);
                 for (let i = 0; i < count; i++) {
-                    if (enemies.filter(e => e.type !== 'boss').length >= 300) break;
+                    if (enemies.filter(e => e.type !== 'boss').length >= 100) break;
                     const side = Math.floor(Math.random() * 4);
                     let x, y;
                     const offset = 60 + Math.random() * 40;
@@ -1422,7 +1423,7 @@
             } else {
                 const xiaohongCount = isAfter12Mins ? 99 : (1 + Math.floor(elapsedSeconds / 15));
                 for (let i = 0; i < xiaohongCount; i++) {
-                    if (enemies.filter(e => e.type !== 'boss').length >= 300) break;
+                    if (enemies.filter(e => e.type !== 'boss').length >= 100) break;
                     const side = Math.floor(Math.random() * 4);
                     let x, y;
                     const offset = 60 + (i * 2);
@@ -1436,13 +1437,14 @@
         }
 
         function spawnZhuanzhuan() {
-            if (enemies.filter(e => e.type !== 'boss').length >= 300) return;
+            // 小兵數量上限限制為 100
+            if (enemies.filter(e => e.type !== 'boss').length >= 100) return;
             const elapsedSeconds = Math.floor(gameTime / 1000);
             const isAfter12Mins = elapsedSeconds >= 720;
             const spawnCount = isAfter12Mins ? 2 : 1;
 
             for (let c = 0; c < spawnCount; c++) {
-                if (enemies.filter(e => e.type !== 'boss').length >= 300) break;
+                if (enemies.filter(e => e.type !== 'boss').length >= 100) break;
                 const startSide = Math.floor(Math.random() * 4);
                 let startX, startY;
                 const margin = 50;
@@ -1464,14 +1466,16 @@
         }
 
         function spawnBoss() {
+            // Boss 數量上限限制為 10
             const currentBossCount = enemies.filter(e => e.type === 'boss').length;
-            if (currentBossCount >= 40) return;
+            if (currentBossCount >= 10) return;
 
             const elapsedSeconds = Math.floor(gameTime / 1000);
             const isAfter12Mins = elapsedSeconds >= 720;
             let spawnCount = isAfter12Mins ? 8 : 1;
 
             for (let i = 0; i < spawnCount; i++) {
+                if (enemies.filter(e => e.type === 'boss').length >= 10) break;
                 const side = Math.floor(Math.random() * 4);
                 let x, y;
                 const offset = 80;
@@ -1481,6 +1485,15 @@
                 else { x = -offset; y = Math.random() * GAME_HEIGHT; }
                 enemies.push(enemyPool.get(x, y, 'boss'));
             }
+        }
+
+        function spawnGem(x, y, xpValue, color) {
+            // 經驗寶石數量限制為 200，超過 200 個時回收最舊的那顆（gems[0]）
+            if (gems.length >= 200) {
+                const oldestGem = gems.shift();
+                gemPool.release(oldestGem);
+            }
+            gems.push(gemPool.get(x, y, xpValue, color));
         }
 
         function triggerUpgradeModal() {
@@ -1917,7 +1930,7 @@
                         for (let p = 0; p < 5; p++) {
                             particles.push(particlePool.get(en.x, en.y, en.color));
                         }
-                        gems.push(gemPool.get(en.x, en.y, en.xpValue, '#38bdf8'));
+                        spawnGem(en.x, en.y, en.xpValue, '#38bdf8');
                         enemies.splice(i, 1);
                         enemyPool.release(en);
                     }
