@@ -150,7 +150,6 @@
     </div>
 
     <script>
-        // 音效系統
         class SoundEffects {
             constructor() { this.ctx = null; }
             init() {
@@ -242,9 +241,6 @@
             }
         }
 
-        // ==========================================
-        // 通用物件池 (Object Pool) 實作
-        // ==========================================
         class ObjectPool {
             constructor(createFn, resetFn, initialSize = 50) {
                 this.createFn = createFn;
@@ -290,7 +286,6 @@
         const audio = new SoundEffects();
         const canvas = document.getElementById('gameCanvas');
         
-        // 初始化 Pixi.js Application (WebGL 2D Render Engine)
         const app = new PIXI.Application({
             view: canvas,
             width: 900,
@@ -299,7 +294,6 @@
             antialias: true
         });
 
-        // 定義 Pixi 渲染圖層 Containers (層級由下而上)
         const bgLayer = new PIXI.Container();
         const gemLayer = new PIXI.Container();
         const enemyLayer = new PIXI.Container();
@@ -316,7 +310,6 @@
         app.stage.addChild(playerLayer);
         app.stage.addChild(textLayer);
 
-        // 繪製背景網格
         const gridGraphics = new PIXI.Graphics();
         gridGraphics.lineStyle(1, 0x1a1f35, 1);
         const gridSize = 60;
@@ -480,6 +473,7 @@
         let enemyBullets = [];
         let enemies = [];
         let gems = [];
+        let specialItems = [];
         let particles = [];
         let floatingTexts = [];
         let explosions = [];
@@ -539,14 +533,11 @@
         });
         canvas.addEventListener('touchend', () => { touchActive = false; });
 
-        // ==========================================
-        // Pixi.js 遊戲物件類別 (結合物件池與 Graphics)
-        // ==========================================
         class Player {
             constructor(x, y) {
                 this.x = x;
                 this.y = y;
-                this.radius = 8;
+                this.radius = 12;
                 this.hp = 100;
                 this.maxHp = 100;
                 this.baseDamageMultiplier = 1.0;
@@ -565,7 +556,6 @@
                 this.lastSpinShotTime = 0;
                 this.lastLightningTime = 0;
 
-                // Pixi Graphics 物件
                 this.graphics = new PIXI.Graphics();
                 this.hpBar = new PIXI.Graphics();
                 this.lvlText = new PIXI.Text('LV.1', {
@@ -626,7 +616,7 @@
                 if (shieldDurationTimer > 0) {
                     this.graphics.beginFill(0xeab308, 0.2);
                     this.graphics.lineStyle(2.5, 0xeab308);
-                    this.graphics.drawCircle(this.x, this.y, 26);
+                    this.graphics.drawCircle(this.x, this.y, 24);
                     this.graphics.endFill();
                 }
 
@@ -636,12 +626,11 @@
                 this.graphics.drawCircle(this.x, this.y, this.radius);
                 this.graphics.endFill();
 
-                // 畫血條
                 this.hpBar.clear();
-                const barWidth = 48;
-                const barHeight = 6;
+                const barWidth = 40;
+                const barHeight = 5;
                 const barX = this.x - barWidth / 2;
-                const barY = this.y - this.radius - 18;
+                const barY = this.y - this.radius - 14;
 
                 this.hpBar.beginFill(0x0f172a, 0.85);
                 this.hpBar.lineStyle(1, 0x334155, 0.8);
@@ -677,6 +666,23 @@
                 this.textObj.x = this.x;
                 this.textObj.y = this.y;
                 this.textObj.alpha = Math.max(0, this.life);
+            }
+        }
+
+        class SpecialItem {
+            constructor() {
+                this.radius = 10;
+                this.graphics = new PIXI.Graphics();
+                gemLayer.addChild(this.graphics);
+            }
+            draw() {
+                this.graphics.clear();
+                this.graphics.position.set(this.x, this.y);
+                this.graphics.beginFill(0xeab308);
+                this.graphics.drawCircle(0, 0, this.radius);
+                this.graphics.beginFill(0x38bdf8);
+                this.graphics.drawCircle(0, 0, this.radius * 0.6);
+                this.graphics.endFill();
             }
         }
 
@@ -779,7 +785,6 @@
                 this.graphics = new PIXI.Graphics();
                 enemyLayer.addChild(this.graphics);
 
-                // 獨立專屬的警告線 Graphics，放特效圖層避免受本體座標旋轉干擾
                 this.lineGraphics = new PIXI.Graphics();
                 effectLayer.addChild(this.lineGraphics);
             }
@@ -792,7 +797,7 @@
                 else if (elapsedSeconds >= 600) hpMultiplier = 2;
 
                 if (this.type === 'boss') {
-                    this.size = 32;
+                    this.size = 64;
                     this.speed = Math.min(2.5, 1.0 + (elapsedMins * 0.1));
                     const bossHp = (500 + Math.floor(elapsedSeconds / 30) * 500) * hpMultiplier;
                     this.hp = bossHp;
@@ -801,7 +806,7 @@
                     this.xpValue = 50;
                     this.color = 0xef4444;
                 } else if (this.type === 'xiaohong') {
-                    this.size = 16;
+                    this.size = 32;
                     this.speed = Math.min(2.0, 1.0 + (elapsedMins * 0.1));
                     const baseHp = (10 + (elapsedSeconds * 0.5)) * hpMultiplier;
                     this.hp = baseHp;
@@ -825,7 +830,7 @@
                 } else if (this.type === 'zhuanzhuan') {
                     const totalSecs = Math.floor(gameTime / 1000);
                     const isUpgraded = totalSecs >= 300;
-                    this.size = isUpgraded ? 48 : 16;
+                    this.size = isUpgraded ? 144 : 48;
                     this.speed = isUpgraded ? 0.2 : (0.5 + Math.random() * 0.7);
                     const baseZhuanHp = 30 + (elapsedSeconds * 1);
                     const zhuanzhuanHp = (isUpgraded ? baseZhuanHp * 3 : baseZhuanHp) * hpMultiplier;
@@ -864,7 +869,6 @@
                     this.y += Math.sin(angleToPlayer) * this.speed;
                 } else if (this.type === 'wasp') {
                     if (this.state === 'warning') {
-                        // 蓄力警告期間全時持續鎖定玩家位置
                         this.angle = Math.atan2(player.y - this.y, player.x - this.x);
                         this.warningTimer += delta;
                         if (this.warningTimer >= 1000) {
@@ -872,12 +876,9 @@
                             this.pauseTimer = 0;
                         }
                     } else if (this.state === 'pausing') {
-                        // 蓄力即將衝刺瞬間持續指向玩家最後位置
-                        this.angle = Math.atan2(player.y - this.y, player.x - this.x);
                         this.pauseTimer += delta;
                         if (this.pauseTimer >= 200) this.state = 'rushing';
                     } else if (this.state === 'rushing') {
-                        // 衝刺時鎖定該方向直線狂飆
                         this.x += Math.cos(this.angle) * this.speed;
                         this.y += Math.sin(this.angle) * this.speed;
                     }
@@ -895,13 +896,13 @@
                         if (this.shootTimer >= 1500) {
                             this.shootTimer = 0;
                             const angleToPlayer = Math.atan2(player.y - this.y, player.x - this.x);
-                            enemyBullets.push(enemyBulletPool.get(this.x, this.y, angleToPlayer, 3.0, 8, 30, true));
+                            enemyBullets.push(enemyBulletPool.get(this.x, this.y, angleToPlayer, 3.0, 24, 30, true));
                         }
                     } else {
                         if (this.shootTimer >= 1800) {
                             this.shootTimer = 0;
                             const angleToPlayer = Math.atan2(player.y - this.y, player.x - this.x);
-                            enemyBullets.push(enemyBulletPool.get(this.x, this.y, angleToPlayer, 3.5, 8, 10, false));
+                            enemyBullets.push(enemyBulletPool.get(this.x, this.y, angleToPlayer, 3.5, 24, 10, false));
                         }
                     }
                 }
@@ -909,14 +910,13 @@
 
             draw() {
                 this.graphics.clear();
-                this.lineGraphics.clear(); // 每一影格清空紅外線 warning 虛線
+                this.lineGraphics.clear();
 
                 const isFlashing = this.flashTimer > performance.now();
                 const renderColor = isFlashing ? 0xffffff : this.color;
 
                 this.graphics.position.set(this.x, this.y);
 
-                // 黃蜂 Warning 狀態的紅外線虛線 (直接使用世界座標，準確繪製到玩家的方向)
                 if (this.type === 'wasp' && (this.state === 'warning' || this.state === 'pausing')) {
                     this.lineGraphics.lineStyle(2, 0xef4444, 0.8);
                     this.lineGraphics.moveTo(this.x, this.y);
@@ -929,13 +929,13 @@
                 if (this.type === 'zhuanzhuan') {
                     const totalSecs = Math.floor(gameTime / 1000);
                     const isUpgraded = totalSecs >= 300;
-                    const coreRadius = isUpgraded ? 24 : 8;
+                    const coreRadius = isUpgraded ? 72 : 24;
                     this.graphics.beginFill(renderColor);
                     this.graphics.drawCircle(0, 0, coreRadius);
                     this.graphics.endFill();
 
-                    const orbitRadius = isUpgraded ? 144 : 48;
-                    const ballRadius = isUpgraded ? 12 : 4;
+                    const orbitRadius = isUpgraded ? 216 : 96;
+                    const ballRadius = isUpgraded ? 36 : 12;
                     for (let i = 0; i < this.purpleBallAngles.length; i++) {
                         const ballX = Math.cos(this.purpleBallAngles[i]) * orbitRadius;
                         const ballY = Math.sin(this.purpleBallAngles[i]) * orbitRadius;
@@ -956,9 +956,9 @@
                     if (this.type === 'boss') {
                         this.graphics.rotation = 0;
                         this.graphics.beginFill(0x000000, 0.6);
-                        this.graphics.drawRect(-20, -28, 40, 6);
+                        this.graphics.drawRect(-30, -45, 60, 8);
                         this.graphics.beginFill(0xef4444);
-                        this.graphics.drawRect(-20, -28, 40 * (Math.max(0, this.hp) / this.maxHp), 6);
+                        this.graphics.drawRect(-30, -45, 60 * (Math.max(0, this.hp) / this.maxHp), 8);
                         this.graphics.endFill();
                     }
                 }
@@ -1132,9 +1132,6 @@
             }
         }
 
-        // ==========================================
-        // 各類 Pixi.js 物件池 (Object Pool) 初始化
-        // ==========================================
         const bulletPool = new ObjectPool(
             () => new Bullet(),
             (b, x, y, angle, damage, speed, penetration, width, height, isFireball, isSniper, explosionRadius, isVortex, isMagicSpin, fireballBaseDamage, isThunderSniper, sniperBaseDamage, isMagicFire, magicFireDamage) => {
@@ -1154,7 +1151,7 @@
             () => new EnemyBullet(),
             (eb, x, y, angle, speed, size, damage, isLargeRed) => {
                 eb.x = x; eb.y = y; eb.angle = angle; eb.speed = speed || 4;
-                eb.size = size || 8; eb.damage = damage || 10; eb.isLargeRed = !!isLargeRed;
+                eb.size = size || 24; eb.damage = damage || 10; eb.isLargeRed = !!isLargeRed;
             },
             50
         );
@@ -1171,17 +1168,28 @@
         const gemPool = new ObjectPool(
             () => new Gem(),
             (g, x, y, value, color) => {
-                g.x = x; g.y = y; g.value = value; g.color = color === '#38bdf8' ? 0x38bdf8 : 0x10b981;
-                g.radius = value >= 50 ? 9 : (value >= 10 ? 7 : 4);
+                g.x = x; g.y = y; g.value = value;
+                g.color = color === '#38bdf8' ? 0x38bdf8 : (color === '#0284c7' ? 0x0284c7 : (color === '#f59e0b' ? 0xf59e0b : (color === '#eab308' ? 0xeab308 : 0x10b981)));
+                const baseRadius = value >= 50 ? 9 : (value >= 10 ? 7 : 4);
+                g.radius = baseRadius * 2;
                 g.isMagnetized = false;
             },
             200
         );
 
+        const specialItemPool = new ObjectPool(
+            () => new SpecialItem(),
+            (item, x, y) => {
+                item.x = x; item.y = y;
+            },
+            10
+        );
+
         const particlePool = new ObjectPool(
             () => new Particle(),
             (pt, x, y, color) => {
-                pt.x = x; pt.y = y; pt.color = color;
+                pt.x = x; pt.y = y;
+                pt.color = typeof color === 'string' ? parseInt(color.replace('#', '0x')) : color;
                 pt.radius = Math.random() * 2.5 + 1;
                 const angle = Math.random() * Math.PI * 2;
                 const speed = Math.random() * 3 + 1;
@@ -1398,9 +1406,8 @@
         }
 
         function spawnEnemy() {
-            // 小兵數量上限限制為 100
             const currentNonBossCount = enemies.filter(e => e.type !== 'boss').length;
-            if (currentNonBossCount >= 100) return;
+            if (currentNonBossCount >= 300) return;
 
             const isWaspGroup = Math.random() < 0.3;
             const elapsedSeconds = Math.floor(gameTime / 1000);
@@ -1410,7 +1417,7 @@
                 audio.playWarning();
                 const count = isAfter12Mins ? (Math.floor(Math.random() * 4) + 3) : (Math.floor(Math.random() * 5) + 1);
                 for (let i = 0; i < count; i++) {
-                    if (enemies.filter(e => e.type !== 'boss').length >= 100) break;
+                    if (enemies.filter(e => e.type !== 'boss').length >= 300) break;
                     const side = Math.floor(Math.random() * 4);
                     let x, y;
                     const offset = 60 + Math.random() * 40;
@@ -1423,7 +1430,7 @@
             } else {
                 const xiaohongCount = isAfter12Mins ? 99 : (1 + Math.floor(elapsedSeconds / 15));
                 for (let i = 0; i < xiaohongCount; i++) {
-                    if (enemies.filter(e => e.type !== 'boss').length >= 100) break;
+                    if (enemies.filter(e => e.type !== 'boss').length >= 300) break;
                     const side = Math.floor(Math.random() * 4);
                     let x, y;
                     const offset = 60 + (i * 2);
@@ -1437,14 +1444,13 @@
         }
 
         function spawnZhuanzhuan() {
-            // 小兵數量上限限制為 100
-            if (enemies.filter(e => e.type !== 'boss').length >= 100) return;
+            if (enemies.filter(e => e.type !== 'boss').length >= 300) return;
             const elapsedSeconds = Math.floor(gameTime / 1000);
             const isAfter12Mins = elapsedSeconds >= 720;
             const spawnCount = isAfter12Mins ? 2 : 1;
 
             for (let c = 0; c < spawnCount; c++) {
-                if (enemies.filter(e => e.type !== 'boss').length >= 100) break;
+                if (enemies.filter(e => e.type !== 'boss').length >= 300) break;
                 const startSide = Math.floor(Math.random() * 4);
                 let startX, startY;
                 const margin = 50;
@@ -1466,16 +1472,24 @@
         }
 
         function spawnBoss() {
-            // Boss 數量上限限制為 10
             const currentBossCount = enemies.filter(e => e.type === 'boss').length;
-            if (currentBossCount >= 10) return;
+            if (currentBossCount >= 40) return;
 
             const elapsedSeconds = Math.floor(gameTime / 1000);
             const isAfter12Mins = elapsedSeconds >= 720;
-            let spawnCount = isAfter12Mins ? 8 : 1;
+            let spawnCount = 1;
+            if (isAfter12Mins) {
+                spawnCount = 8;
+            } else {
+                const totalSecs = elapsedSeconds;
+                if (totalSecs === 30) spawnCount = 1;
+                else if (totalSecs === 60) spawnCount = 2;
+                else if (totalSecs === 90) spawnCount = 3;
+                else if (totalSecs === 120) spawnCount = 4;
+                else if (totalSecs > 120) spawnCount = 5;
+            }
 
             for (let i = 0; i < spawnCount; i++) {
-                if (enemies.filter(e => e.type === 'boss').length >= 10) break;
                 const side = Math.floor(Math.random() * 4);
                 let x, y;
                 const offset = 80;
@@ -1485,15 +1499,6 @@
                 else { x = -offset; y = Math.random() * GAME_HEIGHT; }
                 enemies.push(enemyPool.get(x, y, 'boss'));
             }
-        }
-
-        function spawnGem(x, y, xpValue, color) {
-            // 經驗寶石數量限制為 200，超過 200 個時回收最舊的那顆（gems[0]）
-            if (gems.length >= 200) {
-                const oldestGem = gems.shift();
-                gemPool.release(oldestGem);
-            }
-            gems.push(gemPool.get(x, y, xpValue, color));
         }
 
         function triggerUpgradeModal() {
@@ -1530,6 +1535,11 @@
                 { type: 'speed', name: `移動速度提升 (+0.1 速度) [Lv.${player.speedLevel+1}]`, desc: '增加玩家移動速度 0.1' }
             ];
 
+            let highestLevel = -1;
+            availableSkills.forEach(key => {
+                if (skillConfigs[key].level > highestLevel) highestLevel = skillConfigs[key].level;
+            });
+
             let options = [];
             let safetyCounter = 0;
 
@@ -1544,24 +1554,43 @@
                 } else if (canUnlockMagicSpin && !options.some(o => o.type === 'magicSpin') && Math.random() < 0.5) {
                     candidate = { type: 'magicSpin', name: '🌟 融合升級: 魔法蜂巢飛彈', desc: '魔法彈技能關閉。蜂巢蜜蜂數量 ×3，穿透 +1，且蜂群撞擊敵人時有 15% 機率產生一隻新蜂群！' };
                 } else if (availableSkills.length > 0 && Math.random() < 0.45) {
-                    const sKey = availableSkills[Math.floor(Math.random() * availableSkills.length)];
-                    candidate = { type: 'skill', key: sKey, data: skillConfigs[sKey] };
+                    let weightedSkills = [];
+                    availableSkills.forEach(sKey => {
+                        let weight = (skillConfigs[sKey].level === highestLevel) ? 1.5 : 1.0;
+                        weightedSkills.push({ key: sKey, weight: weight });
+                    });
+                    let totalWeight = weightedSkills.reduce((sum, item) => sum + item.weight, 0);
+                    let rand = Math.random() * totalWeight;
+                    let currentSum = 0;
+                    let chosenKey = availableSkills[0];
+                    for (let item of weightedSkills) {
+                        currentSum += item.weight;
+                        if (rand <= currentSum) { chosenKey = item.key; break; }
+                    }
+                    candidate = { type: 'skill', key: chosenKey, data: skillConfigs[chosenKey] };
                 } else if (lockedSkills.length > 0 && Math.random() < 0.3) {
-                    const sKey = lockedSkills[Math.floor(Math.random() * lockedSkills.length)];
+                    const idx = Math.floor(Math.random() * lockedSkills.length);
+                    const sKey = lockedSkills[idx];
                     candidate = { type: 'unlock', key: sKey, data: skillConfigs[sKey] };
                 } else if (baseOptions.length > 0) {
                     candidate = baseOptions[Math.floor(Math.random() * baseOptions.length)];
+                } else if (availableSkills.length > 0) {
+                    const sKey = availableSkills[Math.floor(Math.random() * availableSkills.length)];
+                    candidate = { type: 'skill', key: sKey, data: skillConfigs[sKey] };
                 }
 
                 if (candidate) {
                     let isDuplicate = false;
                     if (candidate.type === 'skill' || candidate.type === 'unlock') {
                         isDuplicate = options.some(o => o.key === candidate.key);
-                    } else {
+                    } else if (candidate.type === 'thunderSniper' || candidate.type === 'magicFire' || candidate.type === 'magicSpin' || candidate.type === 'maxhp' || candidate.type === 'damage' || candidate.type === 'speed') {
                         isDuplicate = options.some(o => o.type === candidate.type);
                     }
                     if (!isDuplicate) options.push(candidate);
                 }
+
+                const totalPossible = availableSkills.length + lockedSkills.length + baseOptions.length + (canUnlockMagicSpin ? 1 : 0) + (canUnlockThunderSniper ? 1 : 0) + (canUnlockMagicFire ? 1 : 0);
+                if (options.length >= totalPossible) break;
             }
 
             if (options.length === 0) {
@@ -1572,7 +1601,7 @@
 
             options.slice(0, 3).forEach(opt => {
                 const card = document.createElement('div');
-                card.className = "flex-1 bg-slate-900 border border-slate-700 hover:border-amber-400 p-4 rounded-2xl flex flex-col justify-between cursor-pointer transition transform hover:-translate-y-1 shadow-xl";
+                card.className = "flex-1 bg-slate-900 border border-slate-700 hover:border-amber-400 p-3.5 rounded-2xl flex flex-col justify-between cursor-pointer transition transform hover:-translate-y-1 shadow-xl";
                 
                 let title = "", desc = "";
                 if (opt.type === 'thunderSniper' || opt.type === 'magicSpin' || opt.type === 'magicFire') {
@@ -1580,7 +1609,33 @@
                     desc = opt.desc;
                 } else if (opt.type === 'skill') {
                     title = `升級: ${opt.data.name} (Lv.${opt.data.level} → Lv.${opt.data.level + 1})`;
-                    desc = `提升技能威力與效果`;
+                    if (opt.key === 'fireball') {
+                        let nextLevel = opt.data.level + 1;
+                        let maxBonus = (nextLevel === 5) ? "，投射數量 +1(散彈)，冷卻 -300ms" : ((nextLevel === 9) ? "，投射數量 +1，冷卻 -0.3秒" : "");
+                        desc = `傷害 +24，爆炸範圍 +30%${maxBonus}`;
+                    } else if (opt.key === 'lightning') {
+                        let nextLevel = opt.data.level + 1;
+                        let targetAdd = (nextLevel === 2 || nextLevel === 4 || nextLevel === 6 || nextLevel === 8) ? "，目標 +1" : "";
+                        let coolBonus = (nextLevel === 9) ? "，冷卻固定為 200ms" : "，冷卻 -0.1秒";
+                        desc = `傷害 +3${targetAdd}${coolBonus}`;
+                    } else if (opt.key === 'magicBullet') {
+                        let nextLevel = opt.data.level + 1;
+                        let penBonus = (nextLevel === 5 || nextLevel === 9) ? "，穿透 +1" : "";
+                        let maxBonus = (nextLevel === 9) ? "，且額外發射 1 發偏移 15 度的彈道" : "";
+                        desc = `傷害 +12，投射物 +1${penBonus}${maxBonus}，冷卻 -0.05秒`;
+                    } else if (opt.key === 'spinBullet') {
+                        let nextLevel = opt.data.level + 1;
+                        let bulletBonus = (nextLevel === 3 || nextLevel === 6) ? "，蜂群數量 +1" : (nextLevel === 9 ? "，蜂群數量 +2" : "");
+                        desc = `傷害 +4，冷卻 -0.1秒，蜂巢攻擊頻率加快${bulletBonus}`;
+                    } else if (opt.key === 'sniper') {
+                        let nextLevel = opt.data.level + 1;
+                        let countDesc = (nextLevel === 5) ? "投射物數量 ×2" : ((nextLevel === 3 || nextLevel === 7) ? "投射物數量 +1" : (nextLevel === 9 ? "投射物設為 6，子彈尺寸放大 2 倍" : "投射物數量不變"));
+                        let penDesc = (nextLevel === 9) ? "穿透力 +99" : "穿透 +1";
+                        let coolDesc = (nextLevel === 5 || nextLevel === 9) ? "，冷卻時間減半" : "";
+                        desc = `傷害 +40，${penDesc}，${countDesc}${coolDesc}`;
+                    } else {
+                        desc = `傷害 +4，提升攻擊性能`;
+                    }
                 } else if (opt.type === 'unlock') {
                     title = `解鎖新技能: ${opt.data.name}`;
                     desc = `獲得全新強力攻擊武器`;
@@ -1591,7 +1646,7 @@
 
                 card.innerHTML = `
                     <div>
-                        <h3 class="text-sm font-bold text-amber-400 mb-1">${title}</h3>
+                        <h3 class="text-xs font-bold text-amber-400 mb-1">${title}</h3>
                         <p class="text-slate-300 text-[11px]">${desc}</p>
                     </div>
                     <div class="mt-3 text-right">
@@ -1620,7 +1675,46 @@
                 hasMagicSpinUnlocked = true;
                 skillConfigs.magicBullet.enabled = false;
             } else if (opt.type === 'skill') {
-                skillConfigs[opt.key].level++;
+                const skill = skillConfigs[opt.key];
+                skill.level++;
+                if (opt.key === 'sniper') {
+                    if (skill.level === 9) {
+                        skill.penetration = (skill.penetration || 1) + 99;
+                        skill.count = 6;
+                        skill.cooldown = skill.cooldown / 2;
+                    } else {
+                        skill.penetration = (skill.penetration || 1) + 1;
+                        if (skill.level === 5) {
+                            skill.count *= 2;
+                            skill.cooldown = skill.cooldown / 2;
+                        } else if (skill.level === 3 || skill.level === 7) {
+                            skill.count += 1;
+                        }
+                    }
+                } else if (opt.key === 'magicBullet') {
+                    if (skill.level === 5) {
+                        skill.penetration = (skill.penetration || 1) + 1;
+                    } else {
+                        if (skill.level === 9) skill.penetration = (skill.penetration || 1) + 1;
+                    }
+                    skill.cooldown = Math.max(200, skill.cooldown - 50);
+                    skill.count += 1;
+                } else if (opt.key === 'spinBullet') {
+                    skill.cooldown = Math.max(500, skill.cooldown - 100);
+                    skill.shotCooldown = Math.max(200, skill.shotCooldown - 50);
+                    if (skill.level === 3 || skill.level === 6) skill.bulletCount += 1;
+                    else if (skill.level === 9) skill.bulletCount += 2;
+                } else if (opt.key === 'fireball') {
+                    skill.explosionRadius = Math.round(skill.baseRadius * Math.pow(1.3, skill.level - 1));
+                    if (skill.level === 5 || skill.level === 9) {
+                        skill.count += 1;
+                        skill.cooldown = Math.max(200, skill.cooldown - 300);
+                    }
+                } else if (opt.key === 'lightning') {
+                    if (skill.level === 2 || skill.level === 4 || skill.level === 6 || skill.level === 8) skill.count += 1;
+                    if (skill.level === 9) skill.cooldown = 200;
+                    else skill.cooldown = Math.max(200, skill.cooldown - 100);
+                }
             } else if (opt.type === 'unlock') {
                 skillConfigs[opt.key].enabled = true;
                 skillConfigs[opt.key].level = 1;
@@ -1659,8 +1753,7 @@
                 }
             });
 
-            // 清理舊有的物體圖層
-            [bullets, enemyBullets, enemies, gems, particles, floatingTexts, explosions, lightningBeams].forEach(arr => {
+            [bullets, enemyBullets, enemies, gems, specialItems, particles, floatingTexts, explosions, lightningBeams].forEach(arr => {
                 arr.forEach(item => {
                     if (item.graphics) item.graphics.visible = false;
                     if (item.lineGraphics) item.lineGraphics.visible = false;
@@ -1675,6 +1768,7 @@
             enemyBullets = [];
             enemies = [];
             gems = [];
+            specialItems = [];
             particles = [];
             floatingTexts = [];
             explosions = [];
@@ -1888,13 +1982,44 @@
                         if (b.hitEnemies.has(en)) continue;
 
                         let isHit = false;
-                        const dist = Math.hypot(b.x - en.x, b.y - en.y);
-                        if (dist < en.size / 2 + (b.isVortex ? 6 : 8)) isHit = true;
+                        if (b.isSniper || b.isThunderSniper) {
+                            const ABx = b.x - b.prevX;
+                            const ABy = b.y - b.prevY;
+                            const ACx = en.x - b.prevX;
+                            const ACy = en.y - b.prevY;
+                            const abLenSq = ABx * ABx + ABy * ABy;
+                            let t = 0;
+                            if (abLenSq > 0) t = Math.max(0, Math.min(1, (ACx * ABx + ACy * ABy) / abLenSq));
+                            const closestX = b.prevX + t * ABx;
+                            const closestY = b.prevY + t * ABy;
+                            const distSq = (en.x - closestX) * (en.x - closestX) + (en.y - closestY) * (en.y - closestY);
+                            const hitRadius = (en.size / 2) + (b.width / 4);
+                            if (distSq <= hitRadius * hitRadius) isHit = true;
+                        } else {
+                            const dist = Math.hypot(b.x - en.x, b.y - en.y);
+                            if (dist < en.size / 2 + (b.isVortex ? 6 : 8)) isHit = true;
+                        }
 
                         if (isHit) {
                             b.hitEnemies.add(en);
                             en.takeDamage(b.damage);
                             audio.playHit();
+
+                            if (b.isMagicFire) {
+                                explosions.push(explosionPool.get(b.x, b.y, b.magicFireDamage, 72));
+                                audio.playExplosion();
+                            }
+                            if (b.isThunderSniper) {
+                                const thunderBeamDamage = (skillConfigs.lightning.baseDamage * player.damageMultiplier) / 3;
+                                for (let k = 0; k < 3; k++) {
+                                    const beamAngle = (Math.PI * 2 / 3) * k + Math.random() * 0.2;
+                                    lightningBeams.push(lightningBeamPool.get(b.x, b.y, beamAngle, thunderBeamDamage, false));
+                                }
+                            }
+                            if (b.isMagicSpin && Math.random() < 0.15) {
+                                const randomAngle = Math.random() * Math.PI * 2;
+                                bullets.push(bulletPool.get(b.x, b.y, randomAngle, b.damage, 7.0, 1, 8, 8, false, false, 35, true, true));
+                            }
 
                             if (b.isFireball) {
                                 explosions.push(explosionPool.get(b.x, b.y, (b.fireballBaseDamage * player.damageMultiplier) / 2, b.explosionRadius));
@@ -1919,6 +2044,35 @@
                     en.update(now, delta);
                     en.draw();
 
+                    if (en.type === 'zhuanzhuan') {
+                        const buffer = 150;
+                        if (en.x < -buffer || en.x > GAME_WIDTH + buffer || en.y < -buffer || en.y > GAME_HEIGHT + buffer) {
+                            enemies.splice(i, 1);
+                            enemyPool.release(en);
+                            continue;
+                        }
+                        const totalSecs = Math.floor(gameTime / 1000);
+                        const isUpgraded = totalSecs >= 300;
+                        const orbitRadius = isUpgraded ? 216 : 96;
+                        const ballRadius = isUpgraded ? 36 : 12;
+                        for (let bIdx = 0; bIdx < en.purpleBallAngles.length; bIdx++) {
+                            const purpleBallX = en.x + Math.cos(en.purpleBallAngles[bIdx]) * orbitRadius;
+                            const purpleBallY = en.y + Math.sin(en.purpleBallAngles[bIdx]) * orbitRadius;
+                            if (Math.hypot(purpleBallX - player.x, purpleBallY - player.y) < ballRadius + player.radius) {
+                                player.takeDamage(en.damage, now);
+                                audio.playHit();
+                            }
+                        }
+                    }
+
+                    if (en.type === 'wasp') {
+                        if (en.x < -300 || en.x > GAME_WIDTH + 300 || en.y < -300 || en.y > GAME_HEIGHT + 300) {
+                            enemies.splice(i, 1);
+                            enemyPool.release(en);
+                            continue;
+                        }
+                    }
+
                     if (Math.hypot(en.x - player.x, en.y - player.y) < en.size / 2 + player.radius) {
                         player.takeDamage(en.damage, now);
                         audio.playHit();
@@ -1927,12 +2081,28 @@
                     if (en.hp <= 0) {
                         killsCount++;
                         updateHUD();
-                        for (let p = 0; p < 5; p++) {
+                        for (let p = 0; p < (en.type === 'boss' ? 15 : 5); p++) {
                             particles.push(particlePool.get(en.x, en.y, en.color));
                         }
-                        spawnGem(en.x, en.y, en.xpValue, '#38bdf8');
+                        const totalSecs = Math.floor(gameTime / 1000);
+                        const isUpgraded = totalSecs >= 300;
+                        gems.push(gemPool.get(en.x, en.y, en.xpValue, en.type === 'boss' ? '#f59e0b' : (en.type === 'wasp' ? '#eab308' : (isUpgraded ? '#0284c7' : '#38bdf8'))));
+
+                        if (Math.random() < 0.01) specialItems.push(specialItemPool.get(en.x, en.y));
+                        
                         enemies.splice(i, 1);
                         enemyPool.release(en);
+                    }
+                }
+
+                for (let i = specialItems.length - 1; i >= 0; i--) {
+                    const item = specialItems[i];
+                    item.draw();
+                    if (Math.hypot(item.x - player.x, item.y - player.y) < player.radius + item.radius) {
+                        audio.playPowerup();
+                        gems.forEach(g => { g.isMagnetized = true; });
+                        specialItems.splice(i, 1);
+                        specialItemPool.release(item);
                     }
                 }
 
@@ -1994,7 +2164,17 @@
             goSummaryRawKills.innerText = killsCount;
             goSummaryMultiplier.innerText = `x1.0`;
             
-            finalCalculatedScore = killsCount;
+            const baseScore = killsCount; // 分數加成固定為 1
+            if (isVictory) {
+                const clearBonus = killsCount * 2;
+                finalCalculatedScore = baseScore + clearBonus;
+                goSummaryClearBonus.innerText = `+${clearBonus} (${killsCount} * 2)`;
+                goSummaryClearBonusRow.classList.remove('hidden');
+            } else {
+                finalCalculatedScore = baseScore;
+                goSummaryClearBonusRow.classList.add('hidden');
+            }
+
             goSummaryKills.innerText = `${finalCalculatedScore} 分`;
             goSummaryLevel.innerText = `LVL ${player ? player.level : 1}`;
 
