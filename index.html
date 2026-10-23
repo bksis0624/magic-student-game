@@ -254,6 +254,7 @@
                     const obj = this.createFn();
                     obj._inPool = true;
                     if (obj.graphics) obj.graphics.visible = false;
+                    if (obj.lineGraphics) obj.lineGraphics.visible = false;
                     if (obj.textObj) obj.textObj.visible = false;
                     this.pool.push(obj);
                 }
@@ -263,6 +264,7 @@
                 let obj = this.pool.length > 0 ? this.pool.pop() : this.createFn();
                 obj._inPool = false;
                 if (obj.graphics) obj.graphics.visible = true;
+                if (obj.lineGraphics) obj.lineGraphics.visible = true;
                 if (obj.textObj) obj.textObj.visible = true;
                 this.resetFn(obj, ...args);
                 return obj;
@@ -271,7 +273,14 @@
             release(obj) {
                 if (obj && !obj._inPool) {
                     obj._inPool = true;
-                    if (obj.graphics) obj.graphics.visible = false;
+                    if (obj.graphics) {
+                        obj.graphics.visible = false;
+                        obj.graphics.clear();
+                    }
+                    if (obj.lineGraphics) {
+                        obj.lineGraphics.visible = false;
+                        obj.lineGraphics.clear();
+                    }
                     if (obj.textObj) obj.textObj.visible = false;
                     this.pool.push(obj);
                 }
@@ -769,7 +778,12 @@
             constructor() {
                 this.graphics = new PIXI.Graphics();
                 enemyLayer.addChild(this.graphics);
+
+                // 獨立專屬的警告線 Graphics，放特效圖層避免受本體座標旋轉干擾
+                this.lineGraphics = new PIXI.Graphics();
+                effectLayer.addChild(this.lineGraphics);
             }
+
             init(targetX = 0, targetY = 0) {
                 const elapsedSeconds = Math.floor(gameTime / 1000);
                 const elapsedMins = Math.floor(gameTime / 60000);
@@ -850,20 +864,20 @@
                     this.y += Math.sin(angleToPlayer) * this.speed;
                 } else if (this.type === 'wasp') {
                     if (this.state === 'warning') {
-                        // 【修改這裡】讓黃蜂在警告蓄力期間，每一影格都持續鎖定玩家的位置！
+                        // 蓄力警告期間全時持續鎖定玩家位置
                         this.angle = Math.atan2(player.y - this.y, player.x - this.x);
-                        
                         this.warningTimer += delta;
                         if (this.warningTimer >= 1000) {
                             this.state = 'pausing';
                             this.pauseTimer = 0;
                         }
                     } else if (this.state === 'pausing') {
-                        // 暫停瞬間也維持最後鎖定的方向
+                        // 蓄力即將衝刺瞬間持續指向玩家最後位置
+                        this.angle = Math.atan2(player.y - this.y, player.x - this.x);
                         this.pauseTimer += delta;
                         if (this.pauseTimer >= 200) this.state = 'rushing';
                     } else if (this.state === 'rushing') {
-                        // 衝刺中維持衝刺方向直線前進
+                        // 衝刺時鎖定該方向直線狂飆
                         this.x += Math.cos(this.angle) * this.speed;
                         this.y += Math.sin(this.angle) * this.speed;
                     }
@@ -895,25 +909,40 @@
 
             draw() {
                 this.graphics.clear();
-                this.lineGraphics.clear(); // 清空上一影格的虛線
-                
+                this.lineGraphics.clear(); // 每一影格清空紅外線 warning 虛線
+
                 const isFlashing = this.flashTimer > performance.now();
                 const renderColor = isFlashing ? 0xffffff : this.color;
 
                 this.graphics.position.set(this.x, this.y);
 
-                // 修正黃蜂預告線：直接使用世界座標繪製
-                constructor() {
-        this.graphics = new PIXI.Graphics();
-        enemyLayer.addChild(this.graphics);
-        
-        // 另外建立一個專門畫黃蜂預告線的 Graphics，避免受到本體旋轉或位移影響
-        this.lineGraphics = new PIXI.Graphics();
-        effectLayer.addChild(this.lineGraphics);
-    }
+                // 黃蜂 Warning 狀態的紅外線虛線 (直接使用世界座標，準確繪製到玩家的方向)
+                if (this.type === 'wasp' && (this.state === 'warning' || this.state === 'pausing')) {
+                    this.lineGraphics.lineStyle(2, 0xef4444, 0.8);
+                    this.lineGraphics.moveTo(this.x, this.y);
+                    this.lineGraphics.lineTo(
+                        this.x + Math.cos(this.angle) * 2000, 
+                        this.y + Math.sin(this.angle) * 2000
+                    );
+                }
 
                 if (this.type === 'zhuanzhuan') {
-                    // ... 轉轉繪製邏輯保持不變 ...
+                    const totalSecs = Math.floor(gameTime / 1000);
+                    const isUpgraded = totalSecs >= 300;
+                    const coreRadius = isUpgraded ? 24 : 8;
+                    this.graphics.beginFill(renderColor);
+                    this.graphics.drawCircle(0, 0, coreRadius);
+                    this.graphics.endFill();
+
+                    const orbitRadius = isUpgraded ? 144 : 48;
+                    const ballRadius = isUpgraded ? 12 : 4;
+                    for (let i = 0; i < this.purpleBallAngles.length; i++) {
+                        const ballX = Math.cos(this.purpleBallAngles[i]) * orbitRadius;
+                        const ballY = Math.sin(this.purpleBallAngles[i]) * orbitRadius;
+                        this.graphics.beginFill(0xa855f7);
+                        this.graphics.drawCircle(ballX, ballY, ballRadius);
+                        this.graphics.endFill();
+                    }
                 } else {
                     if (this.type === 'boss') this.graphics.rotation = this.rotationAngle;
                     else if (this.type === 'wasp') this.graphics.rotation = this.angle;
@@ -1621,6 +1650,7 @@
             [bullets, enemyBullets, enemies, gems, particles, floatingTexts, explosions, lightningBeams].forEach(arr => {
                 arr.forEach(item => {
                     if (item.graphics) item.graphics.visible = false;
+                    if (item.lineGraphics) item.lineGraphics.visible = false;
                     if (item.textObj) item.textObj.visible = false;
                 });
             });
